@@ -189,29 +189,32 @@ background:var(--off);margin-right:6px;vertical-align:1px}
   <div class="note" id="cfgMsg"></div>
 </div>
 
-<div class="card hide" id="oledCard">
+<div class="card" id="oledCard">
   <h2>Màn hình OLED</h2>
+  <div class="note" id="oledWarn" style="color:var(--err)">Firmware đang chạy
+  trên bo chưa có phần màn hình OLED, nên các nút dưới đây tạm khoá. Nạp bản firmware
+  mới rồi chúng tự mở.</div>
   <div class="row"><span>Tự cuộn trang</span>
-    <label class="sw"><input type="checkbox" id="oledAuto"
+    <label class="sw"><input type="checkbox" id="oledAuto" disabled
       onchange="cmd('oledAuto='+(this.checked?1:0))"><span></span></label>
   </div>
   <div class="note">Gạt sang phải: màn tự đổi trang. Gạt sang trái: đứng yên một trang,
   bấm nút trên bo để sang trang khác. Bấm đúp nút cũng đổi được hai chế độ này.</div>
 
   <div class="row" style="margin-top:12px"><span>Mỗi trang đứng</span><b id="oledPageTx">4 giây</b></div>
-  <input type="number" id="oledPage" min="1" max="60" step="1" value="4" placeholder="4"
+  <input type="number" id="oledPage" min="1" max="60" step="1" value="4" placeholder="4" disabled
          oninput="this.dataset.dirty='1';if(this.value!=='')$('oledPageTx').textContent=this.value+' giây'">
   <div class="note">Chỉ có tác dụng khi đang bật tự cuộn.</div>
 
   <div class="row" style="margin-top:12px"><span>Tắt màn sau</span><b id="oledSleepTx">60 giây</b></div>
-  <input type="number" id="oledSleep" min="0" max="3600" step="5" value="60" placeholder="60"
+  <input type="number" id="oledSleep" min="0" max="3600" step="5" value="60" placeholder="60" disabled
          oninput="this.dataset.dirty='1';if(this.value!=='')$('oledSleepTx').textContent=(this.value=='0'?'sáng mãi':this.value+' giây')">
   <div class="note">Không ai bấm nút trong khoảng này thì màn tự tắt, đỡ lưu ảnh lên tấm
   OLED. Đặt 0 để sáng mãi. Cú bấm đánh thức màn chỉ bật sáng chứ chưa chuyển trang.
   Có lỗi mới thì màn tự sáng rồi nhảy thẳng tới trang sự cố.</div>
 
   <div class="btns" style="margin-top:12px">
-    <button onclick="saveOled()">Lưu cài đặt màn hình</button>
+    <button id="oledSave" disabled onclick="saveOled()">Lưu cài đặt màn hình</button>
   </div>
   <div class="note" id="oledMsg"></div>
 </div>
@@ -371,9 +374,14 @@ function paint(){
   $('rssi').textContent=(S.rssi||0)+' dBm';
   $('up').textContent=hms(S.up);
 
-  // Thẻ màn hình chỉ hiện khi firmware trên bo có bật USE_OLED.
-  $('oledCard').classList.toggle('hide', S.oledAuto===undefined);
-  if(S.oledAuto!==undefined){
+  // Thẻ màn hình luôn hiện. Bo chưa có phần OLED thì chỉ khoá các ô lại và
+  // nói rõ lý do — ẩn hẳn đi thì người dùng tưởng trang web thiếu tính năng.
+  var coOled = (S.oledAuto !== undefined);
+  $('oledWarn').classList.toggle('hide', coOled);
+  ['oledAuto','oledPage','oledSleep','oledSave'].forEach(function(id){
+    $(id).disabled = !coOled;
+  });
+  if(coOled){
     $('oledAuto').checked = !!S.oledAuto;
     $('oledPageTx').textContent = S.oledPage+' giây';
     if(document.activeElement!==$('oledPage')&&!$('oledPage').dataset.dirty)
