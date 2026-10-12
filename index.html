@@ -45,6 +45,12 @@ margin-bottom:12px;font-size:14px}
 .alarm button{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.45);
 color:#fff;margin-top:10px}
 .hide{display:none}
+.sw{position:relative;display:inline-block;width:46px;height:26px;flex:none}
+.sw input{opacity:0;width:0;height:0}
+.sw span{position:absolute;inset:0;border-radius:26px;background:var(--off);transition:.2s;cursor:pointer}
+.sw span:before{content:"";position:absolute;width:20px;height:20px;left:3px;top:3px;border-radius:50%;background:#fff;transition:.2s}
+.sw input:checked+span{background:var(--ok)}
+.sw input:checked+span:before{transform:translateX(20px)}
 .note{color:var(--tx2);font-size:12.5px;margin-top:8px}
 .io{display:flex;justify-content:space-between;align-items:center;padding:6px 0;
 font-size:13.5px;border-bottom:1px solid var(--bd)}
@@ -137,7 +143,6 @@ background:var(--off);margin-right:6px;vertical-align:1px}
   <h2>Lượng nước dùng</h2>
   <div class="row"><span>Tháng này</span><b id="useM">—</b></div>
   <div class="row"><span>Bơm lên bồn</span><b id="useT">—</b></div>
-  <div class="row"><span>Qua bơm áp</span><b id="useB">—</b></div>
   <div id="useHist"></div>
   <div class="btns"><button id="bUseClr" onclick="useClear()">Xoá lịch sử</button></div>
 </div>
@@ -145,7 +150,6 @@ background:var(--off);margin-right:6px;vertical-align:1px}
 <div class="card">
   <h2>Bộ đếm hiệu chuẩn</h2>
   <div class="row"><span>Bơm lên bồn</span><b id="calT">—</b></div>
-  <div class="row"><span>Bơm áp</span><b id="calB">—</b></div>
   <div class="note">Đặt lại bộ đếm, hứng một lượng nước biết chính xác, rồi nhập số lít
   thật vào ô dưới. Số xung chia số lít ra đúng hệ số cần đặt.</div>
   <input type="number" id="calVol" min="0.5" max="2000" step="0.1" placeholder="Số lít thật đã hứng, ví dụ 20">
@@ -185,10 +189,37 @@ background:var(--off);margin-right:6px;vertical-align:1px}
   <div class="note" id="cfgMsg"></div>
 </div>
 
+<div class="card hide" id="oledCard">
+  <h2>Màn hình OLED</h2>
+  <div class="row"><span>Tự cuộn trang</span>
+    <label class="sw"><input type="checkbox" id="oledAuto"
+      onchange="cmd('oledAuto='+(this.checked?1:0))"><span></span></label>
+  </div>
+  <div class="note">Gạt sang phải: màn tự đổi trang. Gạt sang trái: đứng yên một trang,
+  bấm nút trên bo để sang trang khác. Bấm đúp nút cũng đổi được hai chế độ này.</div>
+
+  <div class="row" style="margin-top:12px"><span>Mỗi trang đứng</span><b id="oledPageTx">4 giây</b></div>
+  <input type="number" id="oledPage" min="1" max="60" step="1" value="4" placeholder="4"
+         oninput="this.dataset.dirty='1';if(this.value!=='')$('oledPageTx').textContent=this.value+' giây'">
+  <div class="note">Chỉ có tác dụng khi đang bật tự cuộn.</div>
+
+  <div class="row" style="margin-top:12px"><span>Tắt màn sau</span><b id="oledSleepTx">60 giây</b></div>
+  <input type="number" id="oledSleep" min="0" max="3600" step="5" value="60" placeholder="60"
+         oninput="this.dataset.dirty='1';if(this.value!=='')$('oledSleepTx').textContent=(this.value=='0'?'sáng mãi':this.value+' giây')">
+  <div class="note">Không ai bấm nút trong khoảng này thì màn tự tắt, đỡ lưu ảnh lên tấm
+  OLED. Đặt 0 để sáng mãi. Cú bấm đánh thức màn chỉ bật sáng chứ chưa chuyển trang.
+  Có lỗi mới thì màn tự sáng rồi nhảy thẳng tới trang sự cố.</div>
+
+  <div class="btns" style="margin-top:12px">
+    <button onclick="saveOled()">Lưu cài đặt màn hình</button>
+  </div>
+  <div class="note" id="oledMsg"></div>
+</div>
+
 <div class="card">
   <h2>Trạng thái chân ESP32</h2>
   <div id="ioList"></div>
-  <div class="note">Đèn xanh là chân đang tích cực. 4 chân relay là đầu ra, 2 chân phao là đầu vào.</div>
+  <div class="note">Đèn xanh là chân đang tích cực. Relay là đầu ra; phao và cảm biến nhiệt độ (nếu đã bật) là đầu vào — đèn tắt ở cảm biến nghĩa là mất kết nối, không phải đang nguội.</div>
 </div>
 
 <div class="card">
@@ -199,7 +230,12 @@ background:var(--off);margin-right:6px;vertical-align:1px}
   <div class="row"><span>Sóng WiFi</span><b id="rssi">—</b></div>
   <div class="row"><span>Bo đã chạy</span><b id="up">—</b></div>
   <div class="row"><span>Số liệu mới nhất</span><b id="age">—</b></div>
-  <div class="btns"><button onclick="disconnect()">Ngắt kết nối</button></div>
+  <div class="note">Nạp firmware mới phải làm ở trang nội bộ của bo — chỉ mở được khi
+  điện thoại đang chung WiFi với bo, không mở được từ 4G ngoài nhà.</div>
+  <div class="btns">
+    <button id="bLocal" onclick="openLocal()" disabled>Mở trang nội bộ (nạp firmware)</button>
+    <button onclick="disconnect()">Ngắt kết nối</button>
+  </div>
 </div>
 
 </div>
@@ -290,6 +326,15 @@ function disconnect(){
   setConn('đã ngắt',false);
 }
 
+// Chỉ mở được khi điện thoại đang ở chung WiFi với bo — IP này là IP trong
+// mạng nhà (192.168.x.x), 4G ngoài nhà không tới được. Không có cách nào
+// nạp firmware thật sự từ xa, vì OTA cần gửi thẳng file .bin qua HTTP, mà
+// MQTT chỉ truyền được tin nhắn nhỏ.
+function openLocal(){
+  if(!S.ip){ setConn('chưa biết địa chỉ IP của bo, chờ bo gửi số liệu đã', false); return; }
+  window.open('http://' + S.ip, '_blank');
+}
+
 function cmd(q){
   if(!client||!client.connected){setConn('chưa nối được broker',false);return}
   client.publish(T_CMD,q,{qos:1});
@@ -322,8 +367,21 @@ function paint(){
   $('fw').textContent='v'+S.fw;
   $('ssid').textContent=S.ssid||'—';
   $('ip').textContent=S.ip||'—';
+  $('bLocal').disabled=!S.ip;
   $('rssi').textContent=(S.rssi||0)+' dBm';
   $('up').textContent=hms(S.up);
+
+  // Thẻ màn hình chỉ hiện khi firmware trên bo có bật USE_OLED.
+  $('oledCard').classList.toggle('hide', S.oledAuto===undefined);
+  if(S.oledAuto!==undefined){
+    $('oledAuto').checked = !!S.oledAuto;
+    $('oledPageTx').textContent = S.oledPage+' giây';
+    if(document.activeElement!==$('oledPage')&&!$('oledPage').dataset.dirty)
+      $('oledPage').value=S.oledPage;
+    $('oledSleepTx').textContent = (S.oledSleep==0?'sáng mãi':S.oledSleep+' giây');
+    if(document.activeElement!==$('oledSleep')&&!$('oledSleep').dataset.dirty)
+      $('oledSleep').value=S.oledSleep;
+  }
 
   if(S.dryCheck!==undefined){
     $('cfgDryTx').textContent=S.dryCheck+' giây';
@@ -346,7 +404,6 @@ function paint(){
     if(document.activeElement!==$('cfgMinFlow')&&!$('cfgMinFlow').dataset.dirty)$('cfgMinFlow').value=S.minFlow;
   }
   if(S.calPT!==undefined) $('calT').textContent = S.calPT+' xung · '+S.calLT+' lít';
-  if(S.calPB!==undefined) $('calB').textContent = S.calPB+' xung · '+S.calLB+' lít';
   if(S.lvl>=0){
     $('lvlRow').classList.remove('hide');
     $('lvl').textContent = S.lvl.toFixed(0)+'% · '+S.litres.toFixed(0)+' lít';
@@ -366,7 +423,6 @@ function paint(){
   if(S.useM!==undefined){
     $('useM').textContent = S.useM;
     $('useT').textContent = S.useT+' lít';
-    $('useB').textContent = S.useB+' lít';
   }
 
   $('ioList').innerHTML=(S.io||[]).map(function(p){
@@ -381,9 +437,9 @@ function paint(){
 function useRender(list){
   if(!list || list.length < 2){ $('useHist').innerHTML=''; return }
   var h = '<div class="io" style="border-bottom:none;padding-top:12px">'
-        + '<span class="nm">Tháng trước đó</span><span class="nm">lên bồn · bơm áp</span></div>';
+        + '<span class="nm">Tháng trước đó</span><span class="nm">lên bồn</span></div>';
   list.slice(1).forEach(function(r){
-    h += '<div class="io"><span class="nm">'+r.m+'</span><b>'+r.t+' · '+r.b+' lít</b></div>';
+    h += '<div class="io"><span class="nm">'+r.m+'</span><b>'+r.t+' lít</b></div>';
   });
   $('useHist').innerHTML = h;
 }
@@ -434,6 +490,38 @@ function cfgNum(id){
 function cfgSay(color, msg){
   $('cfgMsg').style.color = 'var(--' + color + ')';
   $('cfgMsg').textContent = msg;
+}
+
+function oledSay(color, msg){
+  $('oledMsg').style.color = 'var(--' + color + ')';
+  $('oledMsg').textContent = msg;
+}
+
+function saveOled(){
+  var t = cfgNum('oledPage'), g = cfgNum('oledSleep');
+  if(isNaN(t) || t < 1 || t > 60)   return oledSay('err','Thời gian mỗi trang phải từ 1 đến 60 giây');
+  if(isNaN(g) || g < 0 || g > 3600) return oledSay('err','Thời gian tắt màn phải từ 0 đến 3600 giây');
+
+  t = Math.round(t);  g = Math.round(g);
+  $('oledPage').value = t;  $('oledSleep').value = g;
+  ['oledPage','oledSleep'].forEach(function(id){ $(id).dataset.dirty = '' });
+
+  oledSay('tx2','Đã gửi, đang chờ bo xác nhận…');
+  cmd('oledPage='+t+'&oledSleep='+g);
+
+  // MQTT không trả lời ngay. Chờ bản tin trạng thái kế tiếp rồi đối chiếu,
+  // chứ không báo "đã lưu" chỉ vì đã gửi đi.
+  var het = Date.now() + 8000;
+  (function cho(){
+    if(S.oledPage == t && S.oledSleep == g){
+      oledSay('ok','Bo đã nhận và lưu vào bộ nhớ.');
+      setTimeout(function(){ $('oledMsg').textContent = ''; }, 5000);
+    }else if(Date.now() < het){
+      setTimeout(cho, 400);
+    }else{
+      oledSay('err','Bo chưa xác nhận. Kiểm tra bo còn online không rồi thử lại.');
+    }
+  })();
 }
 
 async function saveTimings(){
