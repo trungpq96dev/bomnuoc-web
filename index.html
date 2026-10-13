@@ -133,6 +133,48 @@ background:var(--off);margin-right:6px;vertical-align:1px}
   </div>
 </div>
 
+
+<div class="card hide" id="cityCard">
+  <h2>Nước máy tự lên bồn</h2>
+  <div class="row"><span>Van</span><b id="cityPill" class="pill"></b></div>
+  <div class="row"><span>Tình trạng</span><b id="citySt">—</b></div>
+  <div class="row"><span>Đang chảy</span><b id="fCity">—</b></div>
+  <div class="row"><span>Tháng này</span><b id="useC">—</b></div>
+  <div class="btns">
+    <button id="bCityAuto" onclick="cmd('city=auto')">Tự động</button>
+    <button id="bCityOn"   onclick="cmd('city=on')">Mở cứng</button>
+    <button id="bCityOff"  onclick="cmd('city=off')">Đóng nước</button>
+  </div>
+  <div class="note"><b>Đóng nước</b> là van chặn tổng điều khiển từ xa: đi vắng
+  hoặc nghi rò rỉ thì bấm, van đóng và không tự mở lại cho tới khi bạn chuyển về
+  tự động.</div>
+
+  <div class="row" style="margin-top:12px"><span>Mở van khi mức dưới</span><b id="cityOpenTx">—</b></div>
+  <input type="number" id="cityOpenPct" min="5" max="95" step="1" placeholder="50"
+         oninput="this.dataset.dirty='1'">
+  <div class="row" style="margin-top:10px"><span>Đóng van khi mức trên</span><b id="cityFullTx">—</b></div>
+  <input type="number" id="cityFullPct" min="50" max="100" step="1" placeholder="98"
+         oninput="this.dataset.dirty='1'">
+  <div class="btns"><button onclick="saveCity()">Lưu ngưỡng</button></div>
+  <div class="note" id="cityMsg"></div>
+
+  <div class="row" style="margin-top:12px"><span>Góc servo van nước máy</span><b id="svCTx">—</b></div>
+  <div class="row"><span>Góc servo van bypass</span><b id="svBTx">—</b></div>
+  <div class="note">Hiệu chuẩn góc phải làm ở trang trong bo, lúc đang đứng cạnh
+  cái van — chỉnh từ xa thì không nhìn thấy van có khít hay không.</div>
+</div>
+
+<div class="card hide" id="coiCard">
+  <h2>Còi báo động</h2>
+  <div class="row"><span>Trạng thái</span><b id="coiTx">—</b></div>
+  <div class="btns">
+    <button onclick="cmd('coiTat=1')">Tắt còi</button>
+    <button onclick="cmd('coiThu=1')">Kêu thử</button>
+  </div>
+  <div class="note">Một tiếng dài lặp lại = chuyện nước (van kẹt, tràn, rò rỉ).
+  Ba tiếng ngắn lặp lại = chuyện bơm. Còi tự im sau 5 phút.</div>
+</div>
+
 <div class="card hide" id="pzCard">
   <h2>Điện năng tiêu thụ</h2>
   <div id="pzList"></div>
@@ -189,32 +231,29 @@ background:var(--off);margin-right:6px;vertical-align:1px}
   <div class="note" id="cfgMsg"></div>
 </div>
 
-<div class="card" id="oledCard">
+<div class="card hide" id="oledCard">
   <h2>Màn hình OLED</h2>
-  <div class="note" id="oledWarn" style="color:var(--err)">Firmware đang chạy
-  trên bo chưa có phần màn hình OLED, nên các nút dưới đây tạm khoá. Nạp bản firmware
-  mới rồi chúng tự mở.</div>
   <div class="row"><span>Tự cuộn trang</span>
-    <label class="sw"><input type="checkbox" id="oledAuto" disabled
+    <label class="sw"><input type="checkbox" id="oledAuto"
       onchange="cmd('oledAuto='+(this.checked?1:0))"><span></span></label>
   </div>
   <div class="note">Gạt sang phải: màn tự đổi trang. Gạt sang trái: đứng yên một trang,
   bấm nút trên bo để sang trang khác. Bấm đúp nút cũng đổi được hai chế độ này.</div>
 
   <div class="row" style="margin-top:12px"><span>Mỗi trang đứng</span><b id="oledPageTx">4 giây</b></div>
-  <input type="number" id="oledPage" min="1" max="60" step="1" value="4" placeholder="4" disabled
+  <input type="number" id="oledPage" min="1" max="60" step="1" value="4" placeholder="4"
          oninput="this.dataset.dirty='1';if(this.value!=='')$('oledPageTx').textContent=this.value+' giây'">
   <div class="note">Chỉ có tác dụng khi đang bật tự cuộn.</div>
 
   <div class="row" style="margin-top:12px"><span>Tắt màn sau</span><b id="oledSleepTx">60 giây</b></div>
-  <input type="number" id="oledSleep" min="0" max="3600" step="5" value="60" placeholder="60" disabled
+  <input type="number" id="oledSleep" min="0" max="3600" step="5" value="60" placeholder="60"
          oninput="this.dataset.dirty='1';if(this.value!=='')$('oledSleepTx').textContent=(this.value=='0'?'sáng mãi':this.value+' giây')">
   <div class="note">Không ai bấm nút trong khoảng này thì màn tự tắt, đỡ lưu ảnh lên tấm
   OLED. Đặt 0 để sáng mãi. Cú bấm đánh thức màn chỉ bật sáng chứ chưa chuyển trang.
   Có lỗi mới thì màn tự sáng rồi nhảy thẳng tới trang sự cố.</div>
 
   <div class="btns" style="margin-top:12px">
-    <button id="oledSave" disabled onclick="saveOled()">Lưu cài đặt màn hình</button>
+    <button onclick="saveOled()">Lưu cài đặt màn hình</button>
   </div>
   <div class="note" id="oledMsg"></div>
 </div>
@@ -253,7 +292,7 @@ function $(i){return document.getElementById(i)}
 function css(n){return getComputedStyle(document.documentElement).getPropertyValue(n)}
 function hms(s){var h=(s/3600)|0,m=((s%3600)/60)|0,x=s%60;
   return (h?h+'g ':'')+(h||m?m+'p ':'')+x+'s'}
-function sel(el,c){el.className=c?'on':''}
+function sel(el,c){if(el)el.className=c?'on':''}   // bo qua phan tu khong co
 
 ['host','port','user','pass'].forEach(function(k){
   var v=localStorage.getItem('mq_'+k); if(v!==null) $(k).value=v;
@@ -367,6 +406,37 @@ function paint(){
                          :(S.valve=='closed'?'ĐÓNG · nước qua bơm áp':'đang quay…');
   sel($('bVopen'),S.valve=='open');sel($('bVclose'),S.valve=='closed');
 
+  // ---- nước máy ----
+  var coCity = S.cityOn!==undefined;
+  $('cityCard').classList.toggle('hide', !coCity);
+  if(coCity){
+    $('cityPill').textContent = S.cityOn?'ĐANG MỞ':'đóng';
+    $('cityPill').style.background = S.cityOn?'var(--ok)':'var(--off)';
+    var tnc = {nghi:'chờ', vao:'đang vào nước', day:'bồn đã đầy',
+               matnuoc:'MẤT NƯỚC MÁY', loi:'SỰ CỐ — xem phần báo lỗi'};
+    $('citySt').textContent = (S.cityLock?'ĐANG KHOÁ · ':'') + (tnc[S.citySt]||S.citySt);
+    $('fCity').textContent  = (S.fCity||0).toFixed(1)+' L/phút';
+    $('useC').textContent   = (S.useC||0)+' lít';
+    sel($('bCityAuto'), S.cityMode=='auto');
+    sel($('bCityOn'),   S.cityMode=='on');
+    sel($('bCityOff'),  S.cityMode=='off');
+    $('cityOpenTx').textContent = S.cityOpenPct+'%';
+    $('cityFullTx').textContent = S.cityFullPct+'%';
+    if(document.activeElement!==$('cityOpenPct')&&!$('cityOpenPct').dataset.dirty)
+      $('cityOpenPct').value = S.cityOpenPct;
+    if(document.activeElement!==$('cityFullPct')&&!$('cityFullPct').dataset.dirty)
+      $('cityFullPct').value = S.cityFullPct;
+    if(S.svC!==undefined){
+      $('svCTx').textContent = S.svC+'°  (đóng '+S.svCD+'° / mở '+S.svCM+'°)';
+      $('svBTx').textContent = S.svB+'°  (đóng '+S.svBD+'° / mở '+S.svBM+'°)';
+    }
+  }
+  // Thẻ còi hiện khi bo có bật USE_BUZZER. Không có trường riêng cho còi
+  // trong gói trạng thái, nên bám theo nhánh nước máy: hai tính năng đi
+  // cùng nhau trong bản 4.x.
+  $('coiCard').classList.toggle('hide', !coCity);
+  $('coiTx').textContent = S.fault ? 'đang có lỗi, còi có thể đang hú' : 'im';
+
   $('fw').textContent='v'+S.fw;
   $('ssid').textContent=S.ssid||'—';
   $('ip').textContent=S.ip||'—';
@@ -374,14 +444,9 @@ function paint(){
   $('rssi').textContent=(S.rssi||0)+' dBm';
   $('up').textContent=hms(S.up);
 
-  // Thẻ màn hình luôn hiện. Bo chưa có phần OLED thì chỉ khoá các ô lại và
-  // nói rõ lý do — ẩn hẳn đi thì người dùng tưởng trang web thiếu tính năng.
-  var coOled = (S.oledAuto !== undefined);
-  $('oledWarn').classList.toggle('hide', coOled);
-  ['oledAuto','oledPage','oledSleep','oledSave'].forEach(function(id){
-    $(id).disabled = !coOled;
-  });
-  if(coOled){
+  // Thẻ màn hình chỉ hiện khi firmware trên bo có bật USE_OLED.
+  $('oledCard').classList.toggle('hide', S.oledAuto===undefined);
+  if(S.oledAuto!==undefined){
     $('oledAuto').checked = !!S.oledAuto;
     $('oledPageTx').textContent = S.oledPage+' giây';
     if(document.activeElement!==$('oledPage')&&!$('oledPage').dataset.dirty)
@@ -444,12 +509,38 @@ function paint(){
 
 function useRender(list){
   if(!list || list.length < 2){ $('useHist').innerHTML=''; return }
+  // Cột nước máy chỉ hiện khi bo có gửi về, để trang này vẫn dùng được với
+  // firmware cũ chưa có nhánh nước máy.
+  var coC = list.some(function(r){ return r.c!==undefined });
   var h = '<div class="io" style="border-bottom:none;padding-top:12px">'
-        + '<span class="nm">Tháng trước đó</span><span class="nm">lên bồn</span></div>';
+        + '<span class="nm">Tháng trước đó</span><span class="nm">'
+        + (coC ? 'lên bồn · nước máy' : 'lên bồn') + '</span></div>';
   list.slice(1).forEach(function(r){
-    h += '<div class="io"><span class="nm">'+r.m+'</span><b>'+r.t+' lít</b></div>';
+    var v = coC ? (r.t+' · '+r.c+' lít') : (r.t+' lít');
+    h += '<div class="io"><span class="nm">'+r.m+'</span><b>'+v+'</b></div>';
   });
   $('useHist').innerHTML = h;
+}
+
+function saveCity(){
+  var o = parseFloat($('cityOpenPct').value);
+  var f = parseFloat($('cityFullPct').value);
+  function say(m,c){ $('cityMsg').style.color='var(--'+c+')'; $('cityMsg').textContent=m }
+  if(isNaN(o) || o < 5  || o > 95)  return say('Ngưỡng mở van phải từ 5 đến 95%','err');
+  if(isNaN(f) || f < 50 || f > 100) return say('Ngưỡng đóng van phải từ 50 đến 100%','err');
+  if(o >= f) return say('Ngưỡng mở phải nhỏ hơn ngưỡng đóng, nếu không van đóng mở liên tục.','err');
+  o = Math.round(o); f = Math.round(f);
+  $('cityOpenPct').dataset.dirty=''; $('cityFullPct').dataset.dirty='';
+  cmd('cityOpenPct='+o+'&cityFullPct='+f);
+  // Qua MQTT không có câu trả lời ngay như trang trong bo. Bo gửi lại trạng
+  // thái ngay khi nhận lệnh (controlDigest có hai số này), nên cứ chờ gói
+  // tới rồi đối chiếu.
+  say('Đã gửi, chờ bo xác nhận…','tx2');
+  setTimeout(function(){
+    var ok = (S.cityOpenPct==o && S.cityFullPct==f);
+    say(ok?'Bo đã nhận và lưu.':'Bo chưa xác nhận, kiểm tra kết nối rồi thử lại.',
+        ok?'ok':'err');
+  }, 3000);
 }
 var useClrArmed = false;
 function useClear(){
