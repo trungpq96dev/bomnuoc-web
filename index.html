@@ -62,6 +62,28 @@ background:var(--off);margin-right:7px;vertical-align:-1px}
 .led.hi{background:var(--ok)}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;
 background:var(--off);margin-right:6px;vertical-align:1px}
+/* Màn rộng (PC): bỏ giới hạn 560px, dàn thẻ thành nhiều cột cho hết bề
+   ngang. Dùng cột kiểu trang báo chứ không dùng grid: các thẻ cao thấp
+   khác nhau, grid sẽ chừa khoảng trống lớn dưới thẻ ngắn. Điện thoại
+   (dưới 900px) vẫn giữ nguyên một cột như cũ. */
+@media(min-width:900px){
+body{padding:20px 24px}
+.wrap{max-width:none}
+#setup{max-width:560px;margin-left:auto;margin-right:auto}
+#live .tab{column-width:340px;column-gap:14px}
+.tabs{max-width:640px}
+#live .card{break-inside:avoid;page-break-inside:avoid}
+}
+.bar{height:8px;background:var(--bd);border-radius:999px;overflow:hidden;margin:8px 0 2px}
+.bar i{display:block;height:100%;background:var(--acc);width:0}
+/* Thanh tab: chia trang thành 4 phần, mở ra chỉ thấy phần điều khiển hằng
+   ngày. Dính ở mép trên khi cuộn, bấm lúc nào cũng tới. */
+.tabs{display:flex;gap:4px;padding:4px;margin:0 0 12px;background:var(--card);
+border:1px solid var(--bd);border-radius:12px;position:sticky;top:6px;z-index:5}
+.tabs button{flex:1;min-width:0;padding:9px 4px;border:0;background:transparent;
+font-size:14px;font-weight:500;color:var(--tx2);white-space:nowrap}
+.tabs button.on{background:var(--acc);color:#fff}
+.tab.an{display:none}
 </style>
 </head>
 <body><div class="wrap">
@@ -94,6 +116,15 @@ background:var(--off);margin-right:6px;vertical-align:1px}
 
 <div id="live" class="hide">
 
+<nav class="tabs" id="tabs">
+  <button type="button" data-t="tq" class="on">Tổng quan</button>
+  <button type="button" data-t="cd">Cài đặt</button>
+  <button type="button" data-t="hc">Hiệu chuẩn</button>
+  <button type="button" data-t="ht">Hệ thống</button>
+</nav>
+
+<section class="tab" data-tab="tq">
+
 <div class="card">
   <h2>Bồn mái</h2>
   <div class="row hide" id="lvlRow"><span>Mực nước</span><b id="lvl">—</b></div>
@@ -118,7 +149,10 @@ background:var(--off);margin-right:6px;vertical-align:1px}
 <div class="card">
   <h2>Bơm áp</h2>
   <div class="row"><span>Trạng thái</span><b><span id="bstPill" class="pill"></span></b></div>
+  <div class="row"><span>Chế độ</span><b id="bstMode">—</b></div>
+  <div class="row" id="bstFlowRow" style="display:none"><span>Cảm biến dòng</span><b id="bstFlow">—</b></div>
   <div class="btns">
+    <button id="bBstAuto" style="display:none" onclick="cmd('booster=auto')">Tự động</button>
     <button id="bBstOn"  onclick="cmd('booster=on')">Bật</button>
     <button id="bBstOff" onclick="cmd('booster=off')">Tắt</button>
   </div>
@@ -133,6 +167,14 @@ background:var(--off);margin-right:6px;vertical-align:1px}
   </div>
 </div>
 
+<div class="card hide" id="denCard">
+  <h2>Đèn</h2>
+  <div class="row"><span>Trạng thái</span><b><span id="denPill" class="pill"></span></b></div>
+  <div class="btns">
+    <button id="bDenOn"  onclick="cmd('led=on')">Bật</button>
+    <button id="bDenOff" onclick="cmd('led=off')">Tắt</button>
+  </div>
+</div>
 
 <div class="card hide" id="cityCard">
   <h2>Nước máy tự lên bồn</h2>
@@ -148,20 +190,6 @@ background:var(--off);margin-right:6px;vertical-align:1px}
   <div class="note"><b>Đóng nước</b> là van chặn tổng điều khiển từ xa: đi vắng
   hoặc nghi rò rỉ thì bấm, van đóng và không tự mở lại cho tới khi bạn chuyển về
   tự động.</div>
-
-  <div class="row" style="margin-top:12px"><span>Mở van khi mức dưới</span><b id="cityOpenTx">—</b></div>
-  <input type="number" id="cityOpenPct" min="5" max="95" step="1" placeholder="50"
-         oninput="this.dataset.dirty='1'">
-  <div class="row" style="margin-top:10px"><span>Đóng van khi mức trên</span><b id="cityFullTx">—</b></div>
-  <input type="number" id="cityFullPct" min="50" max="100" step="1" placeholder="98"
-         oninput="this.dataset.dirty='1'">
-  <div class="btns"><button onclick="saveCity()">Lưu ngưỡng</button></div>
-  <div class="note" id="cityMsg"></div>
-
-  <div class="row" style="margin-top:12px"><span>Góc servo van nước máy</span><b id="svCTx">—</b></div>
-  <div class="row"><span>Góc servo van bypass</span><b id="svBTx">—</b></div>
-  <div class="note">Hiệu chuẩn góc phải làm ở trang trong bo, lúc đang đứng cạnh
-  cái van — chỉnh từ xa thì không nhìn thấy van có khít hay không.</div>
 </div>
 
 <div class="card hide" id="coiCard">
@@ -189,18 +217,9 @@ background:var(--off);margin-right:6px;vertical-align:1px}
   <div class="btns"><button id="bUseClr" onclick="useClear()">Xoá lịch sử</button></div>
 </div>
 
-<div class="card">
-  <h2>Bộ đếm hiệu chuẩn</h2>
-  <div class="row"><span>Bơm lên bồn</span><b id="calT">—</b></div>
-  <div class="note">Đặt lại bộ đếm, hứng một lượng nước biết chính xác, rồi nhập số lít
-  thật vào ô dưới. Số xung chia số lít ra đúng hệ số cần đặt.</div>
-  <input type="number" id="calVol" min="0.5" max="2000" step="0.1" placeholder="Số lít thật đã hứng, ví dụ 20">
-  <div class="btns">
-    <button onclick="calReset()">Đặt lại bộ đếm</button>
-    <button onclick="calCompute()">Tính hệ số</button>
-  </div>
-  <div class="note" id="calMsg"></div>
-</div>
+</section>
+
+<section class="tab an" data-tab="cd">
 
 <div class="card">
   <h2>Cài đặt bảo vệ bơm lên bồn</h2>
@@ -231,31 +250,104 @@ background:var(--off);margin-right:6px;vertical-align:1px}
   <div class="note" id="cfgMsg"></div>
 </div>
 
-<div class="card hide" id="oledCard">
+<div class="card hide" id="cityCfgCard">
+  <h2>Cài đặt nước máy</h2>
+  <div class="row"><span>Mở van khi mức dưới</span><b id="cityOpenTx">—</b></div>
+  <input type="number" id="cityOpenPct" min="5" max="95" step="1" placeholder="50"
+         oninput="this.dataset.dirty='1'">
+  <div class="row" style="margin-top:10px"><span>Đóng van khi mức trên</span><b id="cityFullTx">—</b></div>
+  <input type="number" id="cityFullPct" min="50" max="100" step="1" placeholder="98"
+         oninput="this.dataset.dirty='1'">
+  <div class="btns"><button onclick="saveCity()">Lưu ngưỡng</button></div>
+  <div class="note" id="cityMsg"></div>
+</div>
+
+<div class="card" id="oledCard">
   <h2>Màn hình OLED</h2>
+  <div class="note" id="oledWarn" style="color:var(--err)">Firmware đang chạy
+  trên bo chưa có phần màn hình OLED, nên các nút dưới đây tạm khoá. Nạp bản firmware
+  mới rồi chúng tự mở.</div>
   <div class="row"><span>Tự cuộn trang</span>
-    <label class="sw"><input type="checkbox" id="oledAuto"
+    <label class="sw"><input type="checkbox" id="oledAuto" disabled
       onchange="cmd('oledAuto='+(this.checked?1:0))"><span></span></label>
   </div>
   <div class="note">Gạt sang phải: màn tự đổi trang. Gạt sang trái: đứng yên một trang,
   bấm nút trên bo để sang trang khác. Bấm đúp nút cũng đổi được hai chế độ này.</div>
 
   <div class="row" style="margin-top:12px"><span>Mỗi trang đứng</span><b id="oledPageTx">4 giây</b></div>
-  <input type="number" id="oledPage" min="1" max="60" step="1" value="4" placeholder="4"
+  <input type="number" id="oledPage" min="1" max="60" step="1" value="4" placeholder="4" disabled
          oninput="this.dataset.dirty='1';if(this.value!=='')$('oledPageTx').textContent=this.value+' giây'">
   <div class="note">Chỉ có tác dụng khi đang bật tự cuộn.</div>
 
   <div class="row" style="margin-top:12px"><span>Tắt màn sau</span><b id="oledSleepTx">60 giây</b></div>
-  <input type="number" id="oledSleep" min="0" max="3600" step="5" value="60" placeholder="60"
+  <input type="number" id="oledSleep" min="0" max="3600" step="5" value="60" placeholder="60" disabled
          oninput="this.dataset.dirty='1';if(this.value!=='')$('oledSleepTx').textContent=(this.value=='0'?'sáng mãi':this.value+' giây')">
   <div class="note">Không ai bấm nút trong khoảng này thì màn tự tắt, đỡ lưu ảnh lên tấm
   OLED. Đặt 0 để sáng mãi. Cú bấm đánh thức màn chỉ bật sáng chứ chưa chuyển trang.
   Có lỗi mới thì màn tự sáng rồi nhảy thẳng tới trang sự cố.</div>
 
   <div class="btns" style="margin-top:12px">
-    <button onclick="saveOled()">Lưu cài đặt màn hình</button>
+    <button id="oledSave" disabled onclick="saveOled()">Lưu cài đặt màn hình</button>
   </div>
   <div class="note" id="oledMsg"></div>
+</div>
+
+</section>
+
+<section class="tab an" data-tab="hc">
+
+<div class="card">
+  <h2>Bộ đếm hiệu chuẩn</h2>
+  <div class="row"><span>Bơm lên bồn</span><b id="calT">—</b></div>
+  <div class="note">Đặt lại bộ đếm, hứng một lượng nước biết chính xác, rồi nhập số lít
+  thật vào ô dưới. Số xung chia số lít ra đúng hệ số cần đặt.</div>
+  <input type="number" id="calVol" min="0.5" max="2000" step="0.1" placeholder="Số lít thật đã hứng, ví dụ 20">
+  <div class="btns">
+    <button onclick="calReset()">Đặt lại bộ đếm</button>
+    <button onclick="calCompute()">Tính hệ số</button>
+  </div>
+  <div class="note" id="calMsg"></div>
+</div>
+
+<div class="card hide" id="svInfoCard">
+  <h2>Góc servo van</h2>
+  <div class="row"><span>Góc servo van nước máy</span><b id="svCTx">—</b></div>
+  <div class="row"><span>Góc servo van bypass</span><b id="svBTx">—</b></div>
+  <div class="note">Hiệu chuẩn góc phải làm ở trang trong bo, lúc đang đứng cạnh
+  cái van — chỉnh từ xa thì không nhìn thấy van có khít hay không.</div>
+</div>
+
+</section>
+
+<section class="tab an" data-tab="ht">
+
+<div class="card hide" id="sysCard">
+  <h2>Tài nguyên ESP32</h2>
+  <div class="row"><span>CPU · lõi chạy chương trình</span><b id="sysCpu">—</b></div>
+  <div class="bar"><i id="sysCpuBar"></i></div>
+  <div class="row"><span>Vòng lặp</span><b id="sysVong">—</b></div>
+  <div class="row"><span>RAM đang dùng</span><b id="sysRam">—</b></div>
+  <div class="bar"><i id="sysRamBar"></i></div>
+  <div class="row"><span>RAM trống thấp nhất từ lúc bật</span><b id="sysRamMin">—</b></div>
+  <div class="row"><span>Khối RAM liền lớn nhất</span><b id="sysKhoi">—</b></div>
+  <div class="row"><span>Flash · firmware</span><b id="sysApp">—</b></div>
+  <div class="bar"><i id="sysAppBar"></i></div>
+  <div class="row"><span>Flash · bộ nhớ cài đặt</span><b id="sysNvs">—</b></div>
+  <div class="bar"><i id="sysNvsBar"></i></div>
+  <div class="row"><span>Chip</span><b id="sysChip">—</b></div>
+  <div class="note">ESP32 không có ổ cứng, chỉ có bộ nhớ flash: một phần chứa firmware
+  (thanh này đầy thì không nạp được bản lớn hơn), một phần lưu cài đặt. CPU chỉ đo lõi
+  chạy chương trình bơm; lõi kia lo WiFi. "Vòng lặp chậm nhất" vọt lên vài nghìn ms
+  nghĩa là có lúc bo bị treo chờ mạng — trong lúc đó logic bơm cũng đứng.</div>
+</div>
+
+<div class="card hide" id="hopCard">
+  <h2>Trong hộp điện</h2>
+  <div class="row"><span>Nhiệt độ</span><b id="hopT">—</b></div>
+  <div class="row"><span>Độ ẩm</span><b id="hopH">—</b></div>
+  <div class="row"><span>Áp suất không khí</span><b id="hopP">—</b></div>
+  <div class="row"><span>Cảm biến</span><b id="hopCB">—</b></div>
+  <div class="note" id="hopNote"></div>
 </div>
 
 <div class="card">
@@ -280,12 +372,15 @@ background:var(--off);margin-right:6px;vertical-align:1px}
   </div>
 </div>
 
+</section>
+
 </div>
 </div>
 
 <script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
 <script>
-var T_STATE='bomnuoc/state', T_CMD='bomnuoc/cmd', T_STATUS='bomnuoc/status', T_USAGE='bomnuoc/usage';
+var T_STATE='bomnuoc/state', T_CMD='bomnuoc/cmd', T_STATUS='bomnuoc/status', T_USAGE='bomnuoc/usage',
+    T_SYS='bomnuoc/sys';   // CPU, RAM, flash — bo gửi theo nhịp tim, 30 giây một lần
 var client=null, S={}, lastAt=0, espOnline=false, connAt=0;
 
 function $(i){return document.getElementById(i)}
@@ -337,7 +432,7 @@ function connect(){
     $('bConn').disabled=false;
     $('setup').classList.add('hide');
     $('live').classList.remove('hide');
-    client.subscribe([T_STATE,T_STATUS,T_USAGE],{qos:1});
+    client.subscribe([T_STATE,T_STATUS,T_USAGE,T_SYS],{qos:1});
   });
   client.on('reconnect',function(){setConn('đang nối lại…',false)});
   client.on('error',function(e){
@@ -357,9 +452,60 @@ function connect(){
     var s=p.toString();
     if(t===T_STATUS){ espOnline=(s==='online'); paint(); return }
     if(t===T_USAGE){ try{ useRender(JSON.parse(s)) }catch(e){} return }
+    if(t===T_SYS){ try{ sysRender(JSON.parse(s)) }catch(e){} return }
     if(t===T_STATE){ try{S=JSON.parse(s);lastAt=Date.now();espOnline=true;paint()}catch(e){} }
   });
 }
+
+// ---- tài nguyên ESP32 ----
+function kb(b){return Math.round(b/1024)+' KB'}
+function thanhPct(id,pct){var e=$(id);if(!e)return;e.style.width=Math.max(0,Math.min(100,pct))+'%';
+  e.style.background=pct>=85?css('--err'):''}   // gần đầy thì chuyển đỏ
+function sysRender(y){
+  if(!y||y.cpu===undefined)return;
+  $('sysCard').classList.remove('hide');
+  $('sysCpu').textContent=y.cpu.toFixed(1)+'% · '+y.mhz+' MHz';thanhPct('sysCpuBar',y.cpu);
+  $('sysVong').textContent=y.vong+' lần/giây · chậm nhất '+y.chamMs+' ms';
+  var dung=y.heapTong-y.heapTrong, p=dung*100/y.heapTong;
+  $('sysRam').textContent=kb(dung)+' / '+kb(y.heapTong)+' ('+p.toFixed(0)+'%)';thanhPct('sysRamBar',p);
+  $('sysRamMin').textContent=kb(y.heapMin);
+  $('sysKhoi').textContent=kb(y.heapKhoi);
+  if(y.appMax){p=y.app*100/y.appMax;
+    $('sysApp').textContent=kb(y.app)+' / '+kb(y.appMax)+' ('+p.toFixed(0)+'%)';thanhPct('sysAppBar',p)}
+  if(y.nvsTong){p=y.nvsDung*100/y.nvsTong;
+    $('sysNvs').textContent=y.nvsDung+' / '+y.nvsTong+' mục ('+p.toFixed(0)+'%)';thanhPct('sysNvsBar',p)}
+  else $('sysNvs').textContent='—';
+  $('sysChip').textContent=y.chip+' · flash '+(y.flash/1048576).toFixed(0)+' MB';
+  // Trong hộp điện (AHT20 + BMP280). Firmware không bật thì không có "hop".
+  var hp=y.hop; $('hopCard').classList.toggle('hide',!hp);
+  if(hp){
+    var nong=(hp.t!==null&&hp.t>=hp.nong), am=(hp.h!==null&&hp.h>=hp.am);
+    $('hopT').textContent=hp.t!==null?hp.t.toFixed(1)+' °C'+(nong?' · NÓNG':'')
+      :(hp.tb!==null?hp.tb.toFixed(1)+' °C (theo BMP280)':'—');
+    $('hopT').style.color=nong?css('--err'):'';
+    $('hopH').textContent=hp.h!==null?hp.h.toFixed(0)+' %'+(am?' · ẨM':''):'—';
+    $('hopH').style.color=am?css('--err'):'';
+    $('hopP').textContent=hp.p!==null?hp.p.toFixed(1)+' hPa':'—';
+    $('hopCB').textContent='AHT20 '+(hp.aht?'có':'MẤT')+' · BMP280 '+(hp.bmp?'có (0x'+hp.bmp.toString(16)+')':'MẤT');
+    $('hopNote').textContent='Nhắn Telegram khi trong hộp từ '+hp.nong+' °C hoặc độ ẩm từ '+hp.am+'% trở lên.';
+  }
+}
+
+// ---- tab ----
+// Nhớ tab đang xem (trên máy này) và ghi lên địa chỉ (#cd, #ht...) để gửi
+// link thẳng tới một tab. Hỏng localStorage thì vẫn chạy, chỉ là không nhớ.
+var TAB_CO=['tq','cd','hc','ht'];
+function chonTab(t){
+  if(TAB_CO.indexOf(t)<0)t='tq';
+  document.querySelectorAll('.tab').forEach(function(x){x.classList.toggle('an',x.dataset.tab!==t)});
+  document.querySelectorAll('#tabs button').forEach(function(b){b.classList.toggle('on',b.dataset.t===t)});
+  try{localStorage.setItem('tab',t)}catch(e){}
+  try{history.replaceState(null,'','#'+t)}catch(e){}
+}
+document.querySelectorAll('#tabs button').forEach(function(b){b.onclick=function(){chonTab(b.dataset.t)}});
+(function(){var t=(location.hash||'').slice(1);
+  if(TAB_CO.indexOf(t)<0){try{t=localStorage.getItem('tab')}catch(e){}}
+  chonTab(t||'tq')})();
 
 function disconnect(){
   if(client){client.end(true);client=null}
@@ -400,7 +546,30 @@ function paint(){
 
   $('bstPill').textContent=S.boostOn?'ĐANG BẬT':'tắt';
   $('bstPill').style.background=S.boostOn?css('--ok'):css('--off');
-  sel($('bBstOn'),S.boostOn);sel($('bBstOff'),!S.boostOn);
+  // Bản firmware cũ không gửi bstMode: giữ nguyên cách hiện cũ.
+  if(S.bstMode!==undefined){
+    $('bstMode').textContent=S.bstMode=='auto'?'tự động theo dòng chảy'
+      :(S.bstMode=='on'?'bật tay':'tắt tay')+(S.bstLock?' · ĐANG KHOÁ':'');
+    if(S.bstMode=='auto'&&S.bstLock)$('bstMode').textContent+=' · ĐANG KHOÁ';
+    sel($('bBstOn'),S.bstMode=='on');sel($('bBstOff'),S.bstMode=='off');
+  }else{sel($('bBstOn'),S.boostOn);sel($('bBstOff'),!S.boostOn);}
+  // Chỉ hiện khi firmware có công tắc dòng (USE_BOOSTER_FLOW).
+  var coBF=(S.bstFlow!==undefined);
+  $('bstFlowRow').style.display=coBF?'':'none';
+  $('bBstAuto').style.display=coBF?'':'none';
+  if(coBF){
+    // bstSensor = tín hiệu thô ngay lúc này; bstFlow = đã lọc, là cái bơm theo.
+    var tho=(S.bstSensor!==undefined)?S.bstSensor:S.bstFlow;
+    $('bstFlow').textContent=(tho?'ĐÓNG · có nước chảy':'HỞ · không có dòng')
+      +(tho!=S.bstFlow?' (đang lọc…)':'');
+    sel($('bBstAuto'),S.bstMode=='auto');}
+
+  // Đèn phụ: firmware không bật USE_DEN_PHU thì không gửi "den", thẻ cứ ẩn.
+  var coDen=(S.den!==undefined);
+  $('denCard').classList.toggle('hide',!coDen);
+  if(coDen){$('denPill').textContent=S.den?'ĐANG SÁNG':'tắt';
+    $('denPill').style.background=S.den?css('--ok'):css('--off');
+    sel($('bDenOn'),!!S.den);sel($('bDenOff'),!S.den);}
 
   $('valve').textContent = S.valve=='open'?'MỞ · nước chảy thường'
                          :(S.valve=='closed'?'ĐÓNG · nước qua bơm áp':'đang quay…');
@@ -409,6 +578,8 @@ function paint(){
   // ---- nước máy ----
   var coCity = S.cityOn!==undefined;
   $('cityCard').classList.toggle('hide', !coCity);
+  $('cityCfgCard').classList.toggle('hide', !coCity);
+  $('svInfoCard').classList.toggle('hide', !coCity);
   if(coCity){
     $('cityPill').textContent = S.cityOn?'ĐANG MỞ':'đóng';
     $('cityPill').style.background = S.cityOn?'var(--ok)':'var(--off)';
@@ -444,9 +615,14 @@ function paint(){
   $('rssi').textContent=(S.rssi||0)+' dBm';
   $('up').textContent=hms(S.up);
 
-  // Thẻ màn hình chỉ hiện khi firmware trên bo có bật USE_OLED.
-  $('oledCard').classList.toggle('hide', S.oledAuto===undefined);
-  if(S.oledAuto!==undefined){
+  // Thẻ màn hình luôn hiện. Bo chưa có phần OLED thì chỉ khoá các ô lại và
+  // nói rõ lý do — ẩn hẳn đi thì người dùng tưởng trang web thiếu tính năng.
+  var coOled = (S.oledAuto !== undefined);
+  $('oledWarn').classList.toggle('hide', coOled);
+  ['oledAuto','oledPage','oledSleep','oledSave'].forEach(function(id){
+    $(id).disabled = !coOled;
+  });
+  if(coOled){
     $('oledAuto').checked = !!S.oledAuto;
     $('oledPageTx').textContent = S.oledPage+' giây';
     if(document.activeElement!==$('oledPage')&&!$('oledPage').dataset.dirty)
