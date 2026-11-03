@@ -150,6 +150,7 @@ font-size:14px;font-weight:500;color:var(--tx2);white-space:nowrap}
   <h2>Bơm áp</h2>
   <div class="row"><span>Trạng thái</span><b><span id="bstPill" class="pill"></span></b></div>
   <div class="row"><span>Chế độ</span><b id="bstMode">—</b></div>
+  <div class="row"><span>Đã chạy</span><b id="bstRun">—</b></div>
   <div class="row" id="bstFlowRow" style="display:none"><span>Cảm biến dòng</span><b id="bstFlow">—</b></div>
   <div class="btns">
     <button id="bBstAuto" style="display:none" onclick="cmd('booster=auto')">Tự động</button>
@@ -546,6 +547,7 @@ function paint(){
 
   $('bstPill').textContent=S.boostOn?'ĐANG BẬT':'tắt';
   $('bstPill').style.background=S.boostOn?css('--ok'):css('--off');
+  $('bstRun').textContent=(S.boostOn&&S.boostRun!==undefined)?hms(S.boostRun):'—';
   // Bản firmware cũ không gửi bstMode: giữ nguyên cách hiện cũ.
   if(S.bstMode!==undefined){
     $('bstMode').textContent=S.bstMode=='auto'?'tự động theo dòng chảy'
