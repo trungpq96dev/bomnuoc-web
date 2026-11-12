@@ -365,6 +365,27 @@ input[type=range]{padding:0;border:0;background:transparent;accent-color:var(--c
   border: 1px solid rgba(22,200,232,.25);
   box-shadow: 0 4px 15px rgba(0,0,0,.2);
 }
+#voiceTranscript {
+  position: fixed;
+  left: 50%;
+  bottom: calc(165px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 9998;
+
+  width: min(85%, 420px);
+  box-sizing: border-box;
+  padding: 12px 16px;
+
+  color: #fff;
+  background: rgba(12, 35, 54, .96);
+  border: 1px solid rgba(22, 200, 232, .3);
+  border-radius: 14px;
+
+  font-size: 14px;
+  text-align: center;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
 </style>
 </head>
 <body>
@@ -1249,30 +1270,132 @@ setInterval(function(){
 },1000);
 
 if($('host').value) connect();
-// AquaControl Voice Assistant - Giai đoạn 1
+// ========================================
+// AQUACONTROL - GIAI ĐOẠN 2
+// Nhận diện giọng nói tiếng Việt trên Chrome
+// ========================================
 (function () {
   const btn = document.getElementById('voiceAssistant');
   const status = document.getElementById('voiceAssistantStatus');
+  const output = document.getElementById('voiceTranscript');
 
-  if (!btn || !status) return;
+  if (!btn || !status || !output) {
+    console.error('[VOICE] Không tìm thấy thành phần giao diện');
+    return;
+  }
 
-  let active = false;
+  const SpeechRecognition =
+    window.SpeechRecognition ||
+    window.webkitSpeechRecognition;
+
+  if (!SpeechRecognition) {
+    status.textContent =
+      'Trình duyệt không hỗ trợ nhận diện giọng nói';
+    btn.disabled = true;
+    return;
+  }
+
+  const recognition = new SpeechRecognition();
+
+  recognition.lang = 'vi-VN';
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+
+  let dangNghe = false;
+  let ketQuaCuoi = '';
+
+  function hienThiTrangThai(text) {
+    status.textContent = text;
+  }
+
+  function dungGiaoDien() {
+    dangNghe = false;
+    btn.classList.remove('active');
+  }
 
   btn.addEventListener('click', function () {
-    active = !active;
+    if (dangNghe) {
+      recognition.stop();
+      return;
+    }
 
-    btn.classList.toggle('active', active);
+    ketQuaCuoi = '';
+    output.textContent = 'Đang lắng nghe...';
 
-    if (active) {
-      status.textContent = 'Đang chuẩn bị trợ lý giọng nói...';
-    } else {
-      status.textContent = 'Trợ lý AquaControl sẵn sàng';
+    try {
+      recognition.start();
+      dangNghe = true;
+      btn.classList.add('active');
+      hienThiTrangThai('Đang nghe bạn nói...');
+    } catch (err) {
+      hienThiTrangThai('Không thể khởi động micro');
+      dungGiaoDien();
+      console.error('[VOICE]', err);
     }
   });
+
+  recognition.onresult = function (event) {
+    let tamThoi = '';
+
+    for (let i = event.resultIndex;
+         i < event.results.length; i++) {
+
+      const text = event.results[i][0].transcript;
+
+      if (event.results[i].isFinal) {
+        ketQuaCuoi += text;
+      } else {
+        tamThoi += text;
+      }
+    }
+
+    output.textContent =
+      ketQuaCuoi + (tamThoi ? ' ' + tamThoi : '');
+
+    if (ketQuaCuoi) {
+      hienThiTrangThai('Đã nhận diện câu nói');
+    }
+  };
+
+  recognition.onerror = function (event) {
+    const errors = {
+      'not-allowed': 'Bạn chưa cấp quyền sử dụng micro',
+      'service-not-allowed': 'Dịch vụ nhận diện giọng nói bị từ chối',
+      'no-speech': 'Không nghe thấy tiếng nói',
+      'audio-capture': 'Không tìm thấy micro',
+      'network': 'Lỗi kết nối dịch vụ nhận diện',
+      'aborted': 'Đã dừng nghe'
+    };
+
+    hienThiTrangThai(
+      errors[event.error] || 'Lỗi nhận diện: ' + event.error
+    );
+  };
+
+  recognition.onend = function () {
+    dungGiaoDien();
+
+    if (ketQuaCuoi.trim()) {
+      output.textContent = ketQuaCuoi.trim();
+      hienThiTrangThai('Đã nhận câu nói, sẵn sàng');
+    } else if (status.textContent === 'Đang nghe bạn nói...') {
+      hienThiTrangThai('Chưa nhận được câu nói');
+    }
+  };
+
+  recognition.onnomatch = function () {
+    hienThiTrangThai('Chưa hiểu nội dung bạn nói');
+  };
+
+  console.log('[VOICE] Nhận diện tiếng Việt đã khởi tạo');
 })();
 </script>
 <div id="voiceAssistantStatus">
   Trợ lý AquaControl sẵn sàng
+</div>
+<div id="voiceTranscript">
+  Câu bạn nói sẽ hiển thị ở đây
 </div>
 
 <button id="voiceAssistant"
