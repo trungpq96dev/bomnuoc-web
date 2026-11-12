@@ -1314,6 +1314,36 @@ setInterval(function(){
     let recognition = null;
     let dangNghe = false;
     let dangXuLy = false;
+    let henGiamSat = null;
+    let henXoaLoi  = null;
+    let dangBaoLoi = false;
+
+    // onend luôn bắn ngay sau onerror và đặt lại thành "Trợ lý sẵn sàng",
+    // nên lời giải thích vì sao micro hỏng biến mất trước khi kịp đọc.
+    function baoLoiMic(tin) {
+        dangBaoLoi = true;
+        trangThai(tin);
+        clearTimeout(henXoaLoi);
+        henXoaLoi = setTimeout(function () {
+            dangBaoLoi = false;
+            if (!dangNghe && !dangXuLy) trangThai(SAN_SANG);
+        }, 6000);
+    }
+
+    // Trước đây dangNghe chỉ được gỡ trong recognition.onend. Khi onend không
+    // bắn — mất mạng giữa chừng, dịch vụ nhận diện chết, tab bị đẩy xuống nền,
+    // hoặc onerror bắn một mình — cờ này kẹt ở true vĩnh viễn, và mọi cú bấm
+    // sau đó rơi vào nhánh stop() của một bộ nhận diện đã chết. Nút mic đơ hẳn,
+    // phải tải lại trang. Giờ mọi đường thoát đều đi qua đúng hàm này.
+    function ketThucNghe() {
+        clearTimeout(henGiamSat);
+        henGiamSat = null;
+        dangNghe = false;
+        if (micButton) {
+            micButton.classList.remove('active');
+            micButton.setAttribute('aria-label', 'Trợ lý giọng nói');
+        }
+    }
 
     const SAN_SANG = 'Trợ lý sẵn sàng';
     let henAnBanGhi = null;
@@ -1605,7 +1635,10 @@ setInterval(function(){
     /* ==================== XỬ LÝ LỆNH ==================== */
 
     async function xuLyCauLenhGiongNoi(rawText) {
-        if (dangXuLy) return;
+        if (dangXuLy) {
+            trangThai('Đang chờ bo trả lời lệnh trước, nói lại sau vài giây nhé.');
+            return;
+        }
         dangXuLy = true;
 
         try {
@@ -1643,93 +1676,88 @@ setInterval(function(){
                 return;
             }
 
-            // Bơm bồn: tự động.
-            if (text.includes('tu dong') &&
-                (text.includes('bom bon') || text.includes('bom len bon'))) {
+            /* Nhận lệnh theo TỪ rời, không theo cả cụm dài. Bản cũ chỉ khớp
+               đúng chuỗi "bat den phu" / "bat den trong hop dien", nên câu
+               ngắn tự nhiên nhất là "bật đèn" rơi thẳng xuống nhánh không
+               hiểu. Bơm cũng vậy: "bật bơm" chỉ chạy khi câu nói không thừa
+               một chữ nào, thêm chữ "đi" là hỏng. */
+            const muonBat = /(^|\s)(bat|mo|khoi dong)(\s|$)/.test(text);
+            const muonTat = /(^|\s)(tat|ngat|dung)(\s|$)/.test(text);
+            const coDen   = /(^|\s)den(\s|$)/.test(text);
+            const coBom   = /(^|\s)bom(\s|$)/.test(text);
+            const tangAp  = text.includes('tang ap');
 
-                if (!await guiLenh(
-                    'tank=auto',
-                    'chuyển bơm bồn sang chế độ tự động',
-                    () => String(docS().tankMode || '').toLowerCase() === 'auto'
-                )) return;
+            // Xoá lỗi / mở khoá phải xét TRƯỚC bơm: "mở khóa bơm" vừa có
+            // "mở" vừa có "bơm", để sau thì nó hoá thành lệnh bật bơm.
+            if (text.includes('xoa loi') ||
+                text.includes('mo khoa') ||
+                text.includes('reset loi')) {
 
-                return;
-            }
-
-            // Bơm bồn: bật.
-            if ((text.includes('bat bom bon') ||
-                 text.includes('bat bom len bon') ||
-                 text === 'bat bom') &&
-                !text.includes('tu dong')) {
-
-                if (!xacNhan('Bạn có chắc chắn muốn bật bơm bồn?')) {
+                if (!xacNhan('Bạn có chắc chắn muốn gửi lệnh xóa lỗi hoặc mở khóa hệ thống?')) {
                     noi('Đã hủy yêu cầu.');
                     return;
                 }
 
-                await guiLenh(
-                    'tank=on',
-                    'bật bơm bồn',
-                    () => docBool(docS().tankOn) === true
-                );
+                await guiLenh('clear=1', 'xóa lỗi hệ thống');
                 return;
             }
 
-            // Bơm bồn: tắt.
-            if (text.includes('tat bom bon') ||
-                text.includes('tat bom len bon')) {
+            // Đèn phụ trong hộp điện. Cả hệ chỉ có một đèn nên "bật đèn" là đủ.
+            if (coDen && (muonBat || muonTat)) {
+                if (docS().den === undefined) {
+                    noi('Firmware trên bo này không bật phần đèn phụ, nên không điều khiển được đèn.');
+                    return;
+                }
 
+                const bat = muonBat && !muonTat;
                 await guiLenh(
-                    'tank=off',
-                    'tắt bơm bồn',
-                    () => docBool(docS().tankOn) === false
+                    bat ? 'led=on' : 'led=off',
+                    (bat ? 'bật' : 'tắt') + ' đèn phụ trong hộp điện',
+                    () => docBool(docS().den) === bat
                 );
                 return;
             }
 
             // Bơm tăng áp.
-            if (text.includes('bat bom tang ap')) {
-                if (!xacNhan('Bạn có chắc chắn muốn bật bơm tăng áp?')) {
+            if (coBom && tangAp && (muonBat || muonTat)) {
+                const bat = muonBat && !muonTat;
+
+                if (bat && !xacNhan('Bạn có chắc chắn muốn bật bơm tăng áp?')) {
                     noi('Đã hủy yêu cầu.');
                     return;
                 }
 
                 await guiLenh(
-                    'booster=on',
-                    'bật bơm tăng áp',
-                    () => docBool(docS().boostOn) === true
+                    bat ? 'booster=on' : 'booster=off',
+                    (bat ? 'bật' : 'tắt') + ' bơm tăng áp',
+                    () => docBool(docS().boostOn) === bat
                 );
                 return;
             }
 
-            if (text.includes('tat bom tang ap')) {
+            // Bơm lên bồn: trả về chế độ tự động.
+            if (coBom && text.includes('tu dong')) {
                 await guiLenh(
-                    'booster=off',
-                    'tắt bơm tăng áp',
-                    () => docBool(docS().boostOn) === false
+                    'tank=auto',
+                    'chuyển bơm bồn sang chế độ tự động',
+                    () => String(docS().tankMode || '').toLowerCase() === 'auto'
                 );
                 return;
             }
 
-            // Đèn phụ trong hộp điện, không phải đèn nhà tắm.
-            if (text.includes('bat den phu') ||
-                text.includes('bat den trong hop dien')) {
+            // Bơm lên bồn: bật tay / tắt tay.
+            if (coBom && (muonBat || muonTat)) {
+                const bat = muonBat && !muonTat;
+
+                if (bat && !xacNhan('Bạn có chắc chắn muốn bật bơm bồn?')) {
+                    noi('Đã hủy yêu cầu.');
+                    return;
+                }
 
                 await guiLenh(
-                    'led=on',
-                    'bật đèn phụ trong hộp điện',
-                    () => docBool(docS().den) === true
-                );
-                return;
-            }
-
-            if (text.includes('tat den phu') ||
-                text.includes('tat den trong hop dien')) {
-
-                await guiLenh(
-                    'led=off',
-                    'tắt đèn phụ trong hộp điện',
-                    () => docBool(docS().den) === false
+                    bat ? 'tank=on' : 'tank=off',
+                    (bat ? 'bật' : 'tắt') + ' bơm bồn',
+                    () => docBool(docS().tankOn) === bat
                 );
                 return;
             }
@@ -1749,20 +1777,6 @@ setInterval(function(){
                 }
 
                 await guiLenh('coiThu=1', 'thử còi cảnh báo');
-                return;
-            }
-
-            // Xóa lỗi / mở khóa.
-            if (text.includes('xoa loi') ||
-                text.includes('mo khoa bom') ||
-                text.includes('reset loi')) {
-
-                if (!xacNhan('Bạn có chắc chắn muốn gửi lệnh xóa lỗi hoặc mở khóa hệ thống?')) {
-                    noi('Đã hủy yêu cầu.');
-                    return;
-                }
-
-                await guiLenh('clear=1', 'xóa lỗi hệ thống');
                 return;
             }
 
@@ -1848,22 +1862,21 @@ setInterval(function(){
 
         recognition.onerror = function (event) {
             console.warn('Speech recognition error:', event.error);
+            ketThucNghe();   // onerror có thể bắn mà không kèm onend
 
             if (event.error === 'not-allowed' ||
                 event.error === 'service-not-allowed') {
-                trangThai('Chưa được cấp quyền micro. Bạn có thể nhập lệnh bằng chữ.');
+                baoLoiMic('Chưa được cấp quyền micro. Bạn có thể nhập lệnh bằng chữ.');
+            } else if (event.error === 'no-speech') {
+                baoLoiMic('Không nghe thấy gì. Bấm lại rồi nói gần micro hơn nhé.');
             } else {
-                trangThai('Không nhận diện được giọng nói. Bạn thử lại nhé.');
+                baoLoiMic('Không nhận diện được giọng nói (' + event.error + '). Bạn thử lại nhé.');
             }
         };
 
         recognition.onend = function () {
-            dangNghe = false;
-            if (micButton) {
-                micButton.classList.remove('active');
-                micButton.setAttribute('aria-label', 'Trợ lý giọng nói');
-            }
-            if (!dangXuLy) trangThai(SAN_SANG);
+            ketThucNghe();
+            if (!dangXuLy && !dangBaoLoi) trangThai(SAN_SANG);
         };
     }
 
@@ -1937,16 +1950,36 @@ setInterval(function(){
                 return;
             }
 
+            // Bấm lần hai để dừng: abort() dừng ngay, rồi tự gỡ cờ chứ không
+            // ngồi chờ onend — nếu bộ nhận diện đã chết thì onend không bao giờ
+            // tới, và nút sẽ kẹt mãi ở trạng thái "đang nghe".
             if (dangNghe) {
-                recognition.stop();
+                try { recognition.abort(); } catch (e) { console.warn(e); }
+                ketThucNghe();
+                trangThai(SAN_SANG);
                 return;
             }
 
+            clearTimeout(henXoaLoi);
+            dangBaoLoi = false;
+
             try {
                 recognition.start();
+                dangNghe = true;          // đặt ngay, không đợi onstart
+                if (micButton) micButton.classList.add('active');
+
+                // Trần cứng cho một phiên nghe. Hết giờ mà chưa thấy onend
+                // hay onerror thì coi như hỏng và trả nút về bấm được.
+                clearTimeout(henGiamSat);
+                henGiamSat = setTimeout(function () {
+                    try { recognition.abort(); } catch (e) {}
+                    ketThucNghe();
+                    baoLoiMic('Micro không phản hồi. Bạn bấm lại hoặc nhập lệnh bằng chữ.');
+                }, 15000);
             } catch (e) {
                 console.warn('Không thể bật micro:', e);
-                trangThai('Không thể bật micro. Bạn thử lại hoặc nhập lệnh bằng chữ.');
+                ketThucNghe();
+                baoLoiMic('Không thể bật micro. Bạn thử lại hoặc nhập lệnh bằng chữ.');
             }
         });
     } else {
