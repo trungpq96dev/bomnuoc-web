@@ -1406,6 +1406,12 @@ setInterval(function(){
        Quan trọng: phải TRẢ luồng này lại khi hết phiên. Giữ micro không thả
        là cách chắc chắn nhất để phiên nghe kế tiếp chết câm. */
     let dongAm = null, amCtx = null, khungVe = null, doAmHong = false;
+    let coKetQua = false;
+
+    // Máy nào không chịu vừa đo âm lượng vừa nhận giọng nói thì nhớ lại,
+    // lần sau khỏi thử nữa.
+    if (kho(function(){ return localStorage.getItem('micDoAm') }, null) === '0')
+        doAmHong = true;
 
     function batDoAm() {
         if (doAmHong || dongAm) return;
@@ -1981,9 +1987,15 @@ setInterval(function(){
     function taoBoNghe() {
         const r = new SpeechRecognition();
         r.lang = 'vi-VN';
-        // continuous: để engine đừng tự cắt phiên ngay khi nghe xong mẩu
-        // đầu — việc quyết định "nói xong chưa" là của hẹn giờ 2 giây.
-        r.continuous = true;
+        /* continuous = false, BẮT BUỘC.
+           Đặt true thì trên Chrome Android engine vào chế độ nghe (onstart
+           bắn, nút đỏ, hiện "Đang nghe bạn nói...") rồi im luôn: không
+           onresult, không onend, không onerror. Nói gì cũng mất hút. Android
+           không thực sự chạy được chế độ này.
+           Để false, engine tự cắt phiên khi bạn ngừng nói và trả kết quả
+           ngay. Hẹn giờ 2 giây vẫn nguyên tác dụng, vì onend cố ý không huỷ
+           nó — xem r.onend bên dưới. */
+        r.continuous = false;
         r.interimResults = true;
         r.maxAlternatives = 1;
 
@@ -2003,6 +2015,7 @@ setInterval(function(){
 
         r.onresult = function (event) {
             if (!cuaMinh()) return;
+            coKetQua = true;
             let finalText = '';
             let interimText = '';
 
@@ -2162,6 +2175,7 @@ setInterval(function(){
             huyGui();
 
             try {
+                coKetQua = false;
                 recognition = taoBoNghe();
                 recognition.start();
                 batDoAm();                // vòng sáng quanh nút theo âm lượng
@@ -2170,13 +2184,29 @@ setInterval(function(){
 
                 // Trần cứng cho một phiên nghe. Hết giờ mà chưa thấy onend
                 // hay onerror thì coi như hỏng và trả nút về bấm được.
+                // Với continuous=false, một phiên bình thường kết thúc trong
+                // vài giây. Quá 9 giây mà chưa ra chữ nào là hỏng thật.
                 clearTimeout(henGiamSat);
                 henGiamSat = setTimeout(function () {
+                    const dangDoAm = !!dongAm;
                     try { if (recognition) recognition.abort(); } catch (e) {}
                     ketThucNghe();
-                    fallback.style.display = 'flex';
-                    baoLoiMic('Micro không phản hồi sau 15 giây. Bấm lại, hoặc nhập lệnh bằng chữ.');
-                }, 15000);
+
+                    if (dangDoAm && !coKetQua) {
+                        // Nghi phần đo âm lượng giành mất micro. Tắt hẳn phần
+                        // đó trên máy này rồi mời bấm lại — lần sau chỉ còn
+                        // nhận diện, nút nhấp nháy đều thay cho đo thật.
+                        doAmHong = true;
+                        kho(function(){ localStorage.setItem('micDoAm','0') });
+                        if (micButton) micButton.classList.add('khongdo');
+                        baoLoiMic('Máy này không cho vừa đo âm lượng vừa nghe. '
+                                + 'Đã tắt phần vòng sáng, bạn bấm lại thử nhé.');
+                    } else {
+                        fallback.style.display = 'flex';
+                        baoLoiMic('Micro không trả về chữ nào sau 9 giây. '
+                                + 'Bấm lại, hoặc nhập lệnh bằng chữ.');
+                    }
+                }, 9000);
             } catch (e) {
                 console.warn('Không thể bật micro:', e);
                 ketThucNghe();
