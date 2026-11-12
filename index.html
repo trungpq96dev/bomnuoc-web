@@ -1366,9 +1366,9 @@ if($('host').value) connect();
     output.textContent =
       ketQuaCuoi + (tamThoi ? ' ' + tamThoi : '');
 
-    if (ketQuaCuoi) {
-      hienThiTrangThai('Đã nhận diện câu nói');
-    }
+   if (ketQuaCuoi.trim()) {
+    hienThiTrangThai('Đang xử lý câu lệnh...');
+	}
   };
 
   recognition.onerror = function (event) {
@@ -1390,9 +1390,9 @@ if($('host').value) connect();
     dungGiaoDien();
 
     if (ketQuaCuoi.trim()) {
-      output.textContent = ketQuaCuoi.trim();
-      hienThiTrangThai('Đã nhận câu nói, sẵn sàng');
-    } else if (status.textContent === 'Đang nghe bạn nói...') {
+    output.textContent = ketQuaCuoi.trim();
+    xuLyCauLenhGiongNoi(ketQuaCuoi.trim());
+	} else if (status.textContent === 'Đang nghe bạn nói...') {
       hienThiTrangThai('Chưa nhận được câu nói');
     }
   };
@@ -1403,6 +1403,76 @@ if($('host').value) connect();
 
   console.log('[VOICE] Nhận diện tiếng Việt đã khởi tạo');
 })();
+// ===== BƯỚC 3: XỬ LÝ LỆNH GIỌNG NÓI =====
+
+function phanTichLenhGiongNoi(cauNoi) {
+    const text = cauNoi
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .trim();
+
+    // Không xử lý câu không có từ khóa bật/tắt
+    const bat = /\b(bat|mo|khoi dong)\b/.test(text);
+    const tat = /\b(tat|dong|dung)\b/.test(text);
+
+    if (!bat && !tat) return null;
+
+    const hanhDong = bat ? 'ON' : 'OFF';
+
+    // Tắt tất cả
+    if (/\b(tat ca|toan bo|het tat ca)\b/.test(text)) {
+        if (tat) return { device: 'ALL', action: 'OFF' };
+        return null;
+    }
+
+    // Nhận diện thiết bị
+    if (text.includes('bom bon') || text.includes('bom nuoc bon')) {
+        return { device: 'PUMP_TANK', action: hanhDong };
+    }
+
+    if (text.includes('bom') || text.includes('may bom')) {
+        return { device: 'PUMP', action: hanhDong };
+    }
+
+    if (text.includes('den nha tam') || text.includes('den phong tam')) {
+        return { device: 'BATHROOM', action: hanhDong };
+    }
+
+    if (text.includes('den')) {
+        return { device: 'LIGHT', action: hanhDong };
+    }
+
+    return null;
+}
+
+// Điểm kết nối với hệ thống điều khiển hiện tại
+function guiLenhGiongNoi(lenh) {
+    console.log('[VOICE COMMAND]', lenh);
+
+    // TODO: Thay bằng hàm gửi MQTT hiện tại của AquaControl.
+    // Không publish trực tiếp khi chưa xác định đúng cấu trúc payload.
+}
+
+// Xử lý câu đã nhận diện
+function xuLyCauLenhGiongNoi(cauNoi) {
+    const lenh = phanTichLenhGiongNoi(cauNoi);
+
+    if (!lenh) {
+        hienThiTrangThai('Chưa hiểu lệnh. Bạn hãy nói lại nhé.');
+        return;
+    }
+
+    guiLenhGiongNoi(lenh);
+
+    output.textContent = cauNoi;
+    hienThiTrangThai(
+        'Đã nhận lệnh: ' +
+        (lenh.action === 'ON' ? 'BẬT ' : 'TẮT ') +
+        lenh.device
+    );
+}
 </script>
 
 </body>
