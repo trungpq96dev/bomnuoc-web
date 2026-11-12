@@ -1520,7 +1520,8 @@ setInterval(function(){
         return null;
     }
 
-    let giongViet = null, daMoKhoaTTS = false;
+    let giongViet = null, daMoKhoaTTS = false, soGiong = 0;
+    let daBaoLoiDoc = false, henDoc = null;
 
     // getVoices() lần đầu thường trả mảng rỗng, danh sách giọng nạp sau.
     // Không nghe sự kiện này thì mãi không chọn được giọng tiếng Việt.
@@ -1528,6 +1529,7 @@ setInterval(function(){
         if (!('speechSynthesis' in window)) return;
         try {
             const ds = window.speechSynthesis.getVoices() || [];
+            soGiong = ds.length;
             giongViet = ds.find(function (v) {
                 return v.lang && v.lang.toLowerCase().indexOf('vi') === 0;
             }) || null;
@@ -1538,37 +1540,76 @@ setInterval(function(){
         try { window.speechSynthesis.addEventListener('voiceschanged', napGiong) } catch (e) {}
     }
 
-    /* Điện thoại chặn speak() nếu nó không nằm trong một cú chạm của người
-       dùng. Câu trả lời của trợ lý lại phát sau đó vài giây, từ hẹn giờ —
-       nên sẽ câm. Cách quanh: phát một câu rỗng ngay trong cú bấm nút mic,
-       coi như xin phép; từ đó trở đi phát lúc nào cũng được. */
+    /* iOS chặn speak() nếu nó không nằm trong một cú chạm. Câu trả lời lại
+       phát sau đó vài giây từ hẹn giờ, nên sẽ câm. Phát một tiếng rất ngắn,
+       âm lượng 0, ngay trong cú bấm nút mic để xin phép.
+       Dùng 'a' chứ không dùng chuỗi rỗng hay dấu cách: nhiều máy báo
+       synthesis-failed với chuỗi rỗng rồi kẹt luôn hàng đợi. */
     function moKhoaTTS() {
         if (daMoKhoaTTS || !('speechSynthesis' in window)) return;
         try {
-            const im = new SpeechSynthesisUtterance(' ');
+            const im = new SpeechSynthesisUtterance('a');
             im.volume = 0;
+            im.rate = 2;
             window.speechSynthesis.speak(im);
             daMoKhoaTTS = true;
         } catch (e) {}
     }
 
+    function khongDocDuoc(vi_sao) {
+        console.warn('TTS:', vi_sao);
+        if (daBaoLoiDoc) return;          // nói một lần thôi, đừng lải nhải
+        daBaoLoiDoc = true;
+        baoLoiMic('Máy không đọc thành tiếng được (' + vi_sao + '; '
+                + soGiong + ' giọng, tiếng Việt: ' + (giongViet ? 'có' : 'không')
+                + '). Câu trả lời vẫn hiện bằng chữ.');
+    }
+
+    /* Ba cái bẫy làm Android câm, dính cái nào cũng mất tiếng:
+       1. cancel() rồi speak() ngay trong cùng một nhịp thì câu bị nuốt.
+       2. Phát ngay khi phiên nghe vừa dứt, lúc hệ điều hành còn đang giữ
+          đường âm thanh cho micro.
+       3. Engine bị treo ở trạng thái pause, phải resume() mới chịu chạy.
+       Nên: huỷ hàng đợi, chờ một nhịp, resume rồi mới phát. */
     function noi(text) {
-        hienThi(text);
+        hienThi(text);                    // chữ hiện ngay, không đợi tiếng
 
         if (!('speechSynthesis' in window)) return;
+        const ss = window.speechSynthesis;
 
-        try {
-            window.speechSynthesis.cancel();
+        clearTimeout(henDoc);
+        try { ss.cancel() } catch (e) {}
 
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'vi-VN';
-            utterance.rate = 1;
-            utterance.pitch = 1;
-            if (!giongViet) napGiong();
-            if (giongViet) utterance.voice = giongViet;
+        henDoc = setTimeout(function () {
+            try {
+                if (!giongViet) napGiong();
 
-            window.speechSynthesis.speak(utterance);
-        } catch (e) { console.warn('Không đọc được câu trả lời:', e) }
+                const u = new SpeechSynthesisUtterance(text);
+                u.lang   = 'vi-VN';
+                u.volume = 1;
+                u.rate   = 1;
+                u.pitch  = 1;
+                if (giongViet) u.voice = giongViet;
+
+                let daChay = false;
+                u.onstart = function () { daChay = true };
+                u.onerror = function (e) {
+                    khongDocDuoc((e && e.error) ? e.error : 'lỗi không rõ');
+                };
+
+                try { ss.resume() } catch (e) {}
+                ss.speak(u);
+
+                // Không onstart, không onerror, cũng không đang nói: engine
+                // nhận rồi nuốt luôn. Trường hợp này im lặng tuyệt đối nên
+                // phải tự bắt, nếu không chẳng ai biết hỏng ở đâu.
+                setTimeout(function () {
+                    if (!daChay && !ss.speaking) khongDocDuoc('engine không phát');
+                }, 1500);
+            } catch (e) {
+                khongDocDuoc((e && e.name) ? e.name : 'ngoại lệ');
+            }
+        }, 300);
     }
 
     function doi(ms) {
