@@ -1270,6 +1270,23 @@ async function saveTimings(){
   return;
 }
 
+// Mở trang là nối lại luôn bằng thông tin đã lưu, không bắt đăng nhập lại
+// mỗi lần. Nối hỏng thì thẻ nhập vẫn đang hiện sẵn kèm lý do, vì thẻ này chỉ
+// được ẩn đi sau khi nối thành công.
+(function tuNoiLai(){
+  var coDu = $('host').value.trim() && $('user').value.trim() && $('pass').value;
+  if(!coDu){
+    // Không có gì để nối: thường là trình duyệt chặn localStorage nên lần
+    // trước không lưu được. Nói rõ thay vì để người dùng tự đoán.
+    if(kho(function(){localStorage.setItem('mq_thu','1');
+                      localStorage.removeItem('mq_thu');return 1},0)!==1)
+      setConn('trình duyệt đang chặn bộ nhớ cục bộ nên không lưu được đăng nhập',false);
+    return;
+  }
+  setConn('đang tự nối lại…',false);
+  connect();
+})();
+
 // Số liệu cũ quá nghĩa là bo mất mạng, dù broker vẫn nối được.
 setInterval(function(){
   // Nối được broker nhưng chưa hề nhận được gì: bo chưa bao giờ lên mạng.
@@ -1317,6 +1334,31 @@ setInterval(function(){
     let henGiamSat = null;
     let henXoaLoi  = null;
     let dangBaoLoi = false;
+
+    const CHO_GUI_MS = 2000;   // nói xong, im lặng chừng này thì tự gửi
+    let vanBanGom = '';
+    let henGui    = null;
+
+    // Không bấm nút nào cả: cứ nói, ngừng 2 giây là lệnh tự chạy. Mỗi mẩu
+    // nghe được lại đẩy hẹn giờ ra xa, nên nói chậm hay ngắt quãng giữa câu
+    // cũng không bị cắt ngang.
+    function hoanGui() {
+        clearTimeout(henGui);
+        henGui = setTimeout(function () {
+            const cau = vanBanGom.trim();
+            vanBanGom = '';
+            henGui = null;
+            if (!cau) return;
+            if (recognition) { try { recognition.stop(); } catch (e) {} }
+            xuLyCauLenhGiongNoi(cau);
+        }, CHO_GUI_MS);
+    }
+
+    function huyGui() {
+        clearTimeout(henGui);
+        henGui = null;
+        vanBanGom = '';
+    }
 
     // onend luôn bắn ngay sau onerror và đặt lại thành "Trợ lý sẵn sàng",
     // nên lời giải thích vì sao micro hỏng biến mất trước khi kịp đọc.
@@ -1827,7 +1869,9 @@ setInterval(function(){
     if (SpeechRecognition) {
         recognition = new SpeechRecognition();
         recognition.lang = 'vi-VN';
-        recognition.continuous = false;
+        // continuous: để engine đừng tự cắt phiên ngay khi nghe xong mẩu
+        // đầu — việc quyết định "nói xong chưa" là của hẹn giờ 2 giây.
+        recognition.continuous = true;
         recognition.interimResults = true;
         recognition.maxAlternatives = 1;
 
@@ -1853,11 +1897,14 @@ setInterval(function(){
                     interimText += result[0].transcript;
             }
 
-            if (interimText)
-                hienThi('Đang nghe: ' + interimText);
+            if (finalText) vanBanGom += (vanBanGom ? ' ' : '') + finalText;
 
-            if (finalText)
-                xuLyCauLenhGiongNoi(finalText);
+            const dangGom = (vanBanGom + ' ' + interimText).trim();
+            if (dangGom) {
+                hienThi(dangGom);
+                trangThai('Nghe xong là gửi sau 2 giây…');
+                hoanGui();
+            }
         };
 
         recognition.onerror = function (event) {
@@ -1866,16 +1913,30 @@ setInterval(function(){
 
             if (event.error === 'not-allowed' ||
                 event.error === 'service-not-allowed') {
-                baoLoiMic('Chưa được cấp quyền micro. Bạn có thể nhập lệnh bằng chữ.');
+                // Không còn đường nào ra lệnh nữa nếu giấu luôn ô nhập chữ.
+                fallback.style.display = 'flex';
+                baoLoiMic('Trình duyệt chặn micro cho trang này (' + event.error
+                        + '). Mở khoá trong phần quyền của trang, hoặc nhập lệnh bằng chữ.');
             } else if (event.error === 'no-speech') {
                 baoLoiMic('Không nghe thấy gì. Bấm lại rồi nói gần micro hơn nhé.');
+            } else if (event.error === 'network') {
+                baoLoiMic('Nhận diện giọng nói cần mạng mà mạng đang không thông. '
+                        + 'Thử lại, hoặc nhập lệnh bằng chữ.');
+                fallback.style.display = 'flex';
+            } else if (event.error === 'aborted') {
+                /* mình tự dừng, không phải lỗi */
             } else {
-                baoLoiMic('Không nhận diện được giọng nói (' + event.error + '). Bạn thử lại nhé.');
+                fallback.style.display = 'flex';
+                baoLoiMic('Không nhận diện được giọng nói (' + event.error + '). '
+                        + 'Tạm thời nhập lệnh bằng chữ.');
             }
         };
 
         recognition.onend = function () {
             ketThucNghe();
+            // Cố ý KHÔNG huỷ henGui: engine hay tự ngắt phiên trước khi hết
+            // 2 giây, huỷ ở đây thì câu vừa nói rơi mất.
+            if (henGui) return;
             if (!dangXuLy && !dangBaoLoi) trangThai(SAN_SANG);
         };
     }
@@ -1904,12 +1965,15 @@ setInterval(function(){
     fallback.appendChild(textInput);
     fallback.appendChild(sendButton);
 
-    // Nếu không hỗ trợ nhận diện giọng nói thì luôn hiện ô nhập.
+    // Bình thường chỉ có nút mic: nói xong 2 giây là lệnh tự chạy, không
+    // cần nút Gửi. Ô nhập chữ chỉ bày ra khi trình duyệt không nhận diện
+    // được giọng nói (Safari cũ, hoặc trang mở qua http nên bị chặn micro),
+    // lúc đó không còn đường nào khác để ra lệnh.
     if (!SpeechRecognition) {
         fallback.style.display = 'flex';
         trangThai('Trình duyệt chưa hỗ trợ nhận diện giọng nói. Bạn nhập lệnh bên dưới.');
     } else {
-        fallback.style.display = 'flex';
+        fallback.style.display = 'none';
     }
 
     // Chèn vào cột trợ lý, ngay phía trên nút mic. Chèn 'afterend' của một
@@ -1953,8 +2017,9 @@ setInterval(function(){
             // Bấm lần hai để dừng: abort() dừng ngay, rồi tự gỡ cờ chứ không
             // ngồi chờ onend — nếu bộ nhận diện đã chết thì onend không bao giờ
             // tới, và nút sẽ kẹt mãi ở trạng thái "đang nghe".
-            if (dangNghe) {
+            if (dangNghe || henGui) {
                 try { recognition.abort(); } catch (e) { console.warn(e); }
+                huyGui();          // bấm lần hai là huỷ, không gửi nữa
                 ketThucNghe();
                 trangThai(SAN_SANG);
                 return;
@@ -1962,6 +2027,7 @@ setInterval(function(){
 
             clearTimeout(henXoaLoi);
             dangBaoLoi = false;
+            huyGui();
 
             try {
                 recognition.start();
@@ -1974,12 +2040,15 @@ setInterval(function(){
                 henGiamSat = setTimeout(function () {
                     try { recognition.abort(); } catch (e) {}
                     ketThucNghe();
-                    baoLoiMic('Micro không phản hồi. Bạn bấm lại hoặc nhập lệnh bằng chữ.');
+                    fallback.style.display = 'flex';
+                    baoLoiMic('Micro không phản hồi sau 15 giây. Bấm lại, hoặc nhập lệnh bằng chữ.');
                 }, 15000);
             } catch (e) {
                 console.warn('Không thể bật micro:', e);
                 ketThucNghe();
-                baoLoiMic('Không thể bật micro. Bạn thử lại hoặc nhập lệnh bằng chữ.');
+                fallback.style.display = 'flex';
+                baoLoiMic('Không bật được micro (' + (e && e.name ? e.name : 'lỗi')
+                        + '). Tạm thời nhập lệnh bằng chữ.');
             }
         });
     } else {
@@ -1989,11 +2058,20 @@ setInterval(function(){
         );
     }
 
-    trangThai(
-        SpeechRecognition
-            ? 'Trợ lý sẵn sàng'
-            : 'Có thể nhập lệnh bằng chữ'
-    );
+    /* Chrome và Safari chỉ cho chạm vào micro trên trang an toàn: https,
+       hoặc localhost. Mở trang này qua http://192.168.x.x, hay mở thẳng file
+       .html từ bộ nhớ máy, thì SpeechRecognition vẫn tồn tại nên nút mic hiện
+       ra bình thường — nhưng bấm vào là bị chặn ngay, nhìn hệt như nút hỏng.
+       Nói rõ lý do và bày sẵn ô nhập chữ, thay vì để người dùng bấm mãi. */
+    const mocKhongTin = !window.isSecureContext || location.protocol === 'file:';
+
+    if (SpeechRecognition && mocKhongTin) {
+        fallback.style.display = 'flex';
+        trangThai('Trang không mở qua HTTPS nên trình duyệt chặn micro. '
+                + 'Hãy nhập lệnh bằng chữ, hoặc mở trang qua địa chỉ https.');
+    } else {
+        trangThai(SpeechRecognition ? SAN_SANG : 'Có thể nhập lệnh bằng chữ');
+    }
 
     console.log('AquaControl Voice Assistant initialized.');
 })();
