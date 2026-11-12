@@ -317,6 +317,54 @@ input[type=range]{padding:0;border:0;background:transparent;accent-color:var(--c
  .tank-visual{height:168px}
  .detail-grid{grid-template-columns:1fr}
 }
+/* AquaControl - Voice Assistant Button */
+#voiceAssistant {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 9999;
+  width: 66px;
+  height: 66px;
+  border: 3px solid rgba(255,255,255,.16);
+  border-radius: 50%;
+  background: linear-gradient(145deg, #16c8e8, #087cae);
+  color: #fff;
+  font-size: 29px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 8px 30px rgba(0,190,230,.35);
+  transition: .2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#voiceAssistant:active {
+  transform: translateX(-50%) scale(.92);
+}
+
+#voiceAssistant.active {
+  background: linear-gradient(145deg, #ff8b55, #e84b55);
+  box-shadow: 0 0 0 9px rgba(255,100,80,.12),
+              0 8px 30px rgba(255,100,80,.3);
+}
+
+#voiceAssistantStatus {
+  position: fixed;
+  left: 50%;
+  bottom: calc(100px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 9998;
+  padding: 8px 15px;
+  border-radius: 20px;
+  background: #102b40;
+  color: #d9f7ff;
+  font-size: 12px;
+  white-space: nowrap;
+  border: 1px solid rgba(22,200,232,.25);
+  box-shadow: 0 4px 15px rgba(0,0,0,.2);
+}
 </style>
 </head>
 <body>
@@ -1201,6 +1249,37 @@ setInterval(function(){
 },1000);
 
 if($('host').value) connect();
+// AquaControl Voice Assistant - Giai đoạn 1
+(function () {
+  const btn = document.getElementById('voiceAssistant');
+  const status = document.getElementById('voiceAssistantStatus');
+
+  if (!btn || !status) return;
+
+  let active = false;
+
+  btn.addEventListener('click', function () {
+    active = !active;
+
+    btn.classList.toggle('active', active);
+
+    if (active) {
+      status.textContent = 'Đang chuẩn bị trợ lý giọng nói...';
+    } else {
+      status.textContent = 'Trợ lý AquaControl sẵn sàng';
+    }
+  });
+})();
 </script>
+<div id="voiceAssistantStatus">
+  Trợ lý AquaControl sẵn sàng
+</div>
+
+<button id="voiceAssistant"
+        type="button"
+        aria-label="Trợ lý giọng nói"
+        title="Trợ lý giọng nói">
+  🎙️
+</button>
 </body>
 </html>
