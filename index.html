@@ -361,10 +361,34 @@ input[type=range]{padding:0;border:0;background:transparent;accent-color:var(--c
 
 #voiceAssistant:active { transform: scale(.92) }
 
+/* Đang nghe: vòng sáng quanh nút phồng theo --muc (0 → 1), do JS đo từ
+   micro cập nhật mỗi khung hình. Chuyển cảnh phải ngắn, để nút bám theo
+   tiếng nói chứ không lờ đờ chạy sau. */
 #voiceAssistant.active {
+  --muc: 0;
   background: linear-gradient(145deg, #ff8b55, #e84b55);
-  box-shadow: 0 0 0 9px rgba(255,100,80,.12),
+  transform: scale(calc(1 + var(--muc) * .13));
+  box-shadow: 0 0 0 calc(7px + var(--muc) * 20px) rgba(255,100,80,.13),
+              0 0 calc(14px + var(--muc) * 34px) rgba(255,120,90,.4),
               0 8px 30px rgba(255,100,80,.3);
+  transition: transform .07s linear, box-shadow .07s linear,
+              background .2s ease;
+}
+
+/* Không đo được âm lượng (máy từ chối luồng micro thứ hai) thì vẫn phải
+   thấy nút đang sống: nhấp nháy đều thay cho đo thật. */
+#voiceAssistant.active.khongdo {
+  animation: micDapMach 1.3s ease-in-out infinite;
+}
+@keyframes micDapMach {
+  0%, 100% { box-shadow: 0 0 0 7px rgba(255,100,80,.13),
+                         0 8px 30px rgba(255,100,80,.3) }
+  50%      { box-shadow: 0 0 0 19px rgba(255,100,80,.07),
+                         0 8px 30px rgba(255,100,80,.3) }
+}
+@media (prefers-reduced-motion: reduce) {
+  #voiceAssistant.active { transform: none; transition: none }
+  #voiceAssistant.active.khongdo { animation: none }
 }
 
 #voiceAssistantStatus {
@@ -1377,9 +1401,62 @@ setInterval(function(){
     // hoặc onerror bắn một mình — cờ này kẹt ở true vĩnh viễn, và mọi cú bấm
     // sau đó rơi vào nhánh stop() của một bộ nhận diện đã chết. Nút mic đơ hẳn,
     // phải tải lại trang. Giờ mọi đường thoát đều đi qua đúng hàm này.
+    /* Vòng sáng quanh nút phồng lên theo độ to của tiếng nói. Mở một luồng
+       micro riêng bằng getUserMedia rồi đo qua AnalyserNode.
+       Quan trọng: phải TRẢ luồng này lại khi hết phiên. Giữ micro không thả
+       là cách chắc chắn nhất để phiên nghe kế tiếp chết câm. */
+    let dongAm = null, amCtx = null, khungVe = null, doAmHong = false;
+
+    function batDoAm() {
+        if (doAmHong || dongAm) return;
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            doAmHong = true; return;
+        }
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(function (luong) {
+            if (!dangNghe) {                 // phiên tắt mất trong lúc xin quyền
+                luong.getTracks().forEach(function (t) { t.stop() });
+                return;
+            }
+            dongAm = luong;
+            const AC = window.AudioContext || window.webkitAudioContext;
+            if (!AC) { tatDoAm(); doAmHong = true; return; }
+
+            amCtx = new AC();
+            const nguon = amCtx.createMediaStreamSource(luong);
+            const phanTich = amCtx.createAnalyser();
+            phanTich.fftSize = 256;
+            phanTich.smoothingTimeConstant = 0.6;
+            nguon.connect(phanTich);
+
+            const dem = new Uint8Array(phanTich.frequencyBinCount);
+            (function ve() {
+                khungVe = requestAnimationFrame(ve);
+                phanTich.getByteFrequencyData(dem);
+                let tong = 0;
+                for (let i = 0; i < dem.length; i++) tong += dem[i];
+                const muc = Math.min(1, (tong / dem.length) / 60);
+                if (micButton) micButton.style.setProperty('--muc', muc.toFixed(2));
+            })();
+        }).catch(function (e) {
+            // Không đo được thì thôi, nút quay về nhấp nháy đều. Nhận diện
+            // giọng nói vẫn chạy bình thường, hai thứ độc lập nhau.
+            console.warn('Không đo được âm lượng:', e && e.name);
+            doAmHong = true;
+            if (micButton) micButton.classList.add('khongdo');
+        });
+    }
+
+    function tatDoAm() {
+        if (khungVe) { cancelAnimationFrame(khungVe); khungVe = null }
+        if (dongAm) { dongAm.getTracks().forEach(function (t) { t.stop() }); dongAm = null }
+        if (amCtx) { try { amCtx.close() } catch (e) {} amCtx = null }
+        if (micButton) micButton.style.setProperty('--muc', '0');
+    }
+
     function ketThucNghe() {
         clearTimeout(henGiamSat);
         henGiamSat = null;
+        tatDoAm();
         dangNghe = false;
         if (micButton) {
             micButton.classList.remove('active');
@@ -1437,26 +1514,55 @@ setInterval(function(){
         return null;
     }
 
+    let giongViet = null, daMoKhoaTTS = false;
+
+    // getVoices() lần đầu thường trả mảng rỗng, danh sách giọng nạp sau.
+    // Không nghe sự kiện này thì mãi không chọn được giọng tiếng Việt.
+    function napGiong() {
+        if (!('speechSynthesis' in window)) return;
+        try {
+            const ds = window.speechSynthesis.getVoices() || [];
+            giongViet = ds.find(function (v) {
+                return v.lang && v.lang.toLowerCase().indexOf('vi') === 0;
+            }) || null;
+        } catch (e) {}
+    }
+    if ('speechSynthesis' in window) {
+        napGiong();
+        try { window.speechSynthesis.addEventListener('voiceschanged', napGiong) } catch (e) {}
+    }
+
+    /* Điện thoại chặn speak() nếu nó không nằm trong một cú chạm của người
+       dùng. Câu trả lời của trợ lý lại phát sau đó vài giây, từ hẹn giờ —
+       nên sẽ câm. Cách quanh: phát một câu rỗng ngay trong cú bấm nút mic,
+       coi như xin phép; từ đó trở đi phát lúc nào cũng được. */
+    function moKhoaTTS() {
+        if (daMoKhoaTTS || !('speechSynthesis' in window)) return;
+        try {
+            const im = new SpeechSynthesisUtterance(' ');
+            im.volume = 0;
+            window.speechSynthesis.speak(im);
+            daMoKhoaTTS = true;
+        } catch (e) {}
+    }
+
     function noi(text) {
         hienThi(text);
 
         if (!('speechSynthesis' in window)) return;
 
-        window.speechSynthesis.cancel();
+        try {
+            window.speechSynthesis.cancel();
 
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'vi-VN';
-        utterance.rate = 1;
-        utterance.pitch = 1;
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'vi-VN';
+            utterance.rate = 1;
+            utterance.pitch = 1;
+            if (!giongViet) napGiong();
+            if (giongViet) utterance.voice = giongViet;
 
-        const voices = window.speechSynthesis.getVoices();
-        const vietnameseVoice = voices.find(v =>
-            v.lang && v.lang.toLowerCase().startsWith('vi')
-        );
-
-        if (vietnameseVoice) utterance.voice = vietnameseVoice;
-
-        window.speechSynthesis.speak(utterance);
+            window.speechSynthesis.speak(utterance);
+        } catch (e) { console.warn('Không đọc được câu trả lời:', e) }
     }
 
     function doi(ms) {
@@ -1497,7 +1603,7 @@ setInterval(function(){
 
             try {
                 if (kiemTra()) {
-                    noi(moTa + '. ESP32 đã phản hồi trạng thái.');
+                    noi('Đã ' + moTa + '. Bo xác nhận rồi.');
                     return true;
                 }
             } catch (e) {
@@ -1505,8 +1611,8 @@ setInterval(function(){
             }
         }
 
-        noi('Đã gửi lệnh ' + moTa +
-            ', nhưng chưa nhận được trạng thái xác nhận từ ESP32.');
+        noi('Đã gửi lệnh ' + moTa + ' nhưng bo chưa xác nhận. '
+          + 'Kiểm tra xem bo còn online không nhé.');
         return false;
     }
 
@@ -1865,17 +1971,28 @@ setInterval(function(){
 
     const SpeechRecognition =
         window.SpeechRecognition || window.webkitSpeechRecognition;
+    const coGiongNoi = !!SpeechRecognition;
 
-    if (SpeechRecognition) {
-        recognition = new SpeechRecognition();
-        recognition.lang = 'vi-VN';
+    /* Dùng lại MỘT đối tượng SpeechRecognition cho mọi phiên là cái bẫy lớn
+       nhất của API này: trên Chrome Android, phiên đầu chạy ngon, từ phiên
+       thứ hai trở đi start() không ném lỗi, không bắn onstart, không bắn
+       onend — im hoàn toàn. Nhìn đúng như "được lần đầu, lần sau đơ".
+       Mỗi lần bấm là dựng một bộ nghe mới, dùng xong vứt. */
+    function taoBoNghe() {
+        const r = new SpeechRecognition();
+        r.lang = 'vi-VN';
         // continuous: để engine đừng tự cắt phiên ngay khi nghe xong mẩu
         // đầu — việc quyết định "nói xong chưa" là của hẹn giờ 2 giây.
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.maxAlternatives = 1;
+        r.continuous = true;
+        r.interimResults = true;
+        r.maxAlternatives = 1;
 
-        recognition.onstart = function () {
+        // Bộ nghe cũ có thể bắn sự kiện muộn sau khi đã bị thay. Bỏ qua,
+        // nếu không nó sẽ dập tắt phiên đang chạy.
+        function cuaMinh() { return r === recognition; }
+
+        r.onstart = function () {
+            if (!cuaMinh()) return;
             dangNghe = true;
             trangThai('Đang nghe bạn nói...');
             if (micButton) {
@@ -1884,7 +2001,8 @@ setInterval(function(){
             }
         };
 
-        recognition.onresult = function (event) {
+        r.onresult = function (event) {
+            if (!cuaMinh()) return;
             let finalText = '';
             let interimText = '';
 
@@ -1907,7 +2025,8 @@ setInterval(function(){
             }
         };
 
-        recognition.onerror = function (event) {
+        r.onerror = function (event) {
+            if (!cuaMinh()) return;
             console.warn('Speech recognition error:', event.error);
             ketThucNghe();   // onerror có thể bắn mà không kèm onend
 
@@ -1932,13 +2051,16 @@ setInterval(function(){
             }
         };
 
-        recognition.onend = function () {
+        r.onend = function () {
+            if (!cuaMinh()) return;
             ketThucNghe();
             // Cố ý KHÔNG huỷ henGui: engine hay tự ngắt phiên trước khi hết
             // 2 giây, huỷ ở đây thì câu vừa nói rơi mất.
             if (henGui) return;
             if (!dangXuLy && !dangBaoLoi) trangThai(SAN_SANG);
         };
+
+        return r;
     }
 
     /* ==================== NHẬP LỆNH BẰNG CHỮ ==================== */
@@ -2008,9 +2130,19 @@ setInterval(function(){
         micButton.addEventListener('click', function (event) {
             event.preventDefault();
 
-            if (!recognition) {
+            if (!coGiongNoi) {
                 trangThai('Trình duyệt không hỗ trợ nhận diện giọng nói. Hãy nhập lệnh bằng chữ.');
+                fallback.style.display = 'flex';
                 textInput.focus();
+                return;
+            }
+
+            moKhoaTTS();   // phải gọi trong cú bấm, xem chú thích ở moKhoaTTS
+
+            // Đang chờ bo trả lời lệnh trước thì nhận thêm câu nữa cũng vô
+            // ích: xuLyCauLenhGiongNoi sẽ bỏ qua. Nói ra, đừng im lặng.
+            if (dangXuLy) {
+                trangThai('Đang chờ bo trả lời lệnh trước, chờ vài giây nhé.');
                 return;
             }
 
@@ -2018,7 +2150,7 @@ setInterval(function(){
             // ngồi chờ onend — nếu bộ nhận diện đã chết thì onend không bao giờ
             // tới, và nút sẽ kẹt mãi ở trạng thái "đang nghe".
             if (dangNghe || henGui) {
-                try { recognition.abort(); } catch (e) { console.warn(e); }
+                try { if (recognition) recognition.abort(); } catch (e) { console.warn(e); }
                 huyGui();          // bấm lần hai là huỷ, không gửi nữa
                 ketThucNghe();
                 trangThai(SAN_SANG);
@@ -2030,7 +2162,9 @@ setInterval(function(){
             huyGui();
 
             try {
+                recognition = taoBoNghe();
                 recognition.start();
+                batDoAm();                // vòng sáng quanh nút theo âm lượng
                 dangNghe = true;          // đặt ngay, không đợi onstart
                 if (micButton) micButton.classList.add('active');
 
@@ -2038,7 +2172,7 @@ setInterval(function(){
                 // hay onerror thì coi như hỏng và trả nút về bấm được.
                 clearTimeout(henGiamSat);
                 henGiamSat = setTimeout(function () {
-                    try { recognition.abort(); } catch (e) {}
+                    try { if (recognition) recognition.abort(); } catch (e) {}
                     ketThucNghe();
                     fallback.style.display = 'flex';
                     baoLoiMic('Micro không phản hồi sau 15 giây. Bấm lại, hoặc nhập lệnh bằng chữ.');
