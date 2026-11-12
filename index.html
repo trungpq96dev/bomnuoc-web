@@ -724,7 +724,20 @@ input[type=range]{padding:0;border:0;background:transparent;accent-color:var(--c
 </div>
 </main>
 </div>
+<div id="voiceAssistantStatus">
+  Trợ lý AquaControl sẵn sàng
+</div>
 
+<div id="voiceTranscript">
+  Câu bạn nói sẽ hiển thị ở đây
+</div>
+
+<button id="voiceAssistant"
+        type="button"
+        aria-label="Trợ lý giọng nói"
+        title="Trợ lý giọng nói">
+  🎙️
+</button>
 <script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
 <script>
 var T_STATE='bomnuoc/state', T_CMD='bomnuoc/cmd', T_STATUS='bomnuoc/status', T_USAGE='bomnuoc/usage',
@@ -1391,18 +1404,6 @@ if($('host').value) connect();
   console.log('[VOICE] Nhận diện tiếng Việt đã khởi tạo');
 })();
 </script>
-<div id="voiceAssistantStatus">
-  Trợ lý AquaControl sẵn sàng
-</div>
-<div id="voiceTranscript">
-  Câu bạn nói sẽ hiển thị ở đây
-</div>
 
-<button id="voiceAssistant"
-        type="button"
-        aria-label="Trợ lý giọng nói"
-        title="Trợ lý giọng nói">
-  🎙️
-</button>
 </body>
 </html>
